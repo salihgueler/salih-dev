@@ -17,6 +17,12 @@ if (!post) {
 
 const { Content } = await render(post);
 const canonical = post.data.canonical ?? new URL(`/blog/${post.id}/`, Astro.site);
+const sources = [
+  ...(post.data.originalUrl
+    ? [{ name: "DEV Community", url: post.data.originalUrl }]
+    : []),
+  ...post.data.sources,
+];
 const articleStructuredData = [
   {
     "@context": "https://schema.org",
@@ -29,6 +35,11 @@ const articleStructuredData = [
     mainEntityOfPage: canonical.toString(),
     inLanguage: "en",
     keywords: [post.data.category, ...post.data.tags].join(", "),
+    ...(sources.length > 0
+      ? {
+          sameAs: sources.map((source) => source.url),
+        }
+      : {}),
     author: {
       "@type": "Person",
       name: "Salih Güler",
@@ -96,6 +107,28 @@ const articleStructuredData = [
       <p class="article-summary">
         <strong>Summary:</strong> {post.data.aiSummary}
       </p>
+      {
+        sources.length > 0 && (
+          <p class="article-source">
+            Also published on{" "}
+            {
+              sources.map((source, index) => (
+                <>
+                  {index > 0 && (index === sources.length - 1 ? " and " : ", ")}
+                  <a
+                    href={source.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {source.name}
+                  </a>
+                </>
+              ))
+            }
+            .
+          </p>
+        )
+      }
     </header>
 
     <figure>

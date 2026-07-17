@@ -142,6 +142,12 @@ function postList(posts: CollectionEntry<"blog">[]): string {
 function postDocument(post: CollectionEntry<"blog">): string {
   const body = replaceYouTubeDirectives(post.body ?? "");
   const tags = post.data.tags.map((tag) => `#${tag}`).join(", ");
+  const sources = [
+    ...(post.data.originalUrl
+      ? [{ name: "DEV Community", url: post.data.originalUrl }]
+      : []),
+    ...post.data.sources,
+  ];
 
   return [
     `# ${post.data.title}`,
@@ -154,6 +160,9 @@ function postDocument(post: CollectionEntry<"blog">): string {
       : null,
     `Category: ${post.data.category}`,
     `Tags: ${tags}`,
+    ...sources.map(
+      (source) => `Also published on ${source.name}: ${source.url}`,
+    ),
     "",
     `> Summary: ${post.data.aiSummary}`,
     "",

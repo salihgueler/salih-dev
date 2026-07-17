@@ -19,6 +19,15 @@ const blog = defineCollection({
     }),
     aiSummary: z.string(),
     canonical: z.url().optional(),
+    originalUrl: z.url().optional(),
+    sources: z
+      .array(
+        z.object({
+          name: z.string(),
+          url: z.url(),
+        }),
+      )
+      .default([]),
     draft: z.boolean().default(false),
   }),
 });

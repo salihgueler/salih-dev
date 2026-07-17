@@ -10,6 +10,8 @@
     "start": "node ./dist/server/entry.mjs",
     "build": "astro build",
     "check": "astro check",
+    "import:dev": "node scripts/import-dev.mjs",
+    "import:medium": "node scripts/import-medium.mjs",
     "preview": "astro preview",
     "astro": "astro"
   },
@@ -19,9 +21,11 @@
     "@astrojs/rss": "^4.0.19",
     "@astrojs/sitemap": "^3.7.3",
     "astro": "^7.1.0",
+    "fast-xml-parser": "^5.10.1",
     "remark-directive": "^4.0.0",
     "remark-gfm": "^4.0.1",
-    "simple-icons": "^16.26.0"
+    "simple-icons": "^16.26.0",
+    "turndown": "^7.2.4"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
