@@ -41,8 +41,13 @@ const baseStructuredData: StructuredData[] = [
     "@type": "Person",
     name: site.name,
     url: site.url,
-    jobTitle: site.role,
-    email: `mailto:${site.email}`,
+    jobTitle: site.jobTitle,
+    worksFor: {
+      "@type": "Organization",
+      name: site.organization,
+      url: "https://aws.amazon.com/",
+    },
+    ...(site.email ? { email: `mailto:${site.email}` } : {}),
     homeLocation: {
       "@type": "Place",
       name: `${site.location.city}, ${site.location.country}`,

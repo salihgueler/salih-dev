@@ -5,68 +5,71 @@ section you do not want displayed on the website. -->
 
 ## Identity
 
-**Preferred public name:**
+**Preferred public name:** Salih Güler
 
-**Professional title or headline:**
+**Professional title or headline:** Senior Developer Advocate
 
 **Short biography:**
 
-<!-- One or two sentences for page descriptions and introductions. -->
+Salih is a Senior Developer Advocate at AWS with a strong focus on frontend and mobile app development, developer experience, and serverless architecture.
 
 **Long biography:**
 
-<!-- Two or more paragraphs for the About page. -->
+I am a Senior Developer Advocate at AWS based in Berlin, Germany. My work focuses on frontend and mobile app development, developer experience, and serverless architecture.
+
+I help developers turn complex technical ideas into approachable, practical solutions. I also speak at developer conferences and community events, sharing lessons from the intersection of client applications, cloud systems, and developer tooling.
 
 ## Location
 
-**Public city or region:**
+**Public city or region:** Berlin
 
-**Country:**
+**Country:** Germany
 
 **Location last updated:**
 
-<!-- Specify whether the site may display the exact city, only the country, or
-another level of detail. -->
-
-**Location privacy preference:**
+**Location privacy preference:** Display Berlin, Germany.
 
 ## Contact And Social Profiles
 
 **Public email address:**
 
-**LinkedIn URL:**
+**LinkedIn URL:** https://www.linkedin.com/in/salihgueler
 
-**GitHub URL:**
+**GitHub URL:** https://github.com/salihgueler
 
-**X URL:**
+**X URL:** https://x.com/salihgueler
 
 **Instagram URL:**
 
 <!-- Add any other public profiles below. -->
 
+**Bluesky:** https://bsky.app/profile/salihgueler.dev
+
 **Other profiles:**
+
+
 
 ## Upcoming Conferences
 
 <!-- Repeat this block for each conference. Remove it if there are none. -->
 
-### Conference Name
+### Agentcon London
 
-- Location:
-- Date:
-- Event URL:
-- Your role:
+- Location: London, United Kingdom
+- Date: September 8, 2026
+- Event URL: https://globalai.community/e/x79ncrl7
+- Your role: Speaker
 
 ## Recent Conferences
 
 <!-- List up to three recent conferences. -->
 
-### Conference Name
+### WeAreDevelopers
 
-- Location:
-- Date:
-- Event URL:
-- Your role:
+- Location: Berlin, Germany
+- Date: July 8, 2026
+- Event URL: https://www.wearedevelopers.com/
+- Your role: Speaker
 
 ## Existing Sample Posts
 
@@ -101,11 +104,11 @@ Write or paste the post here.
 
 **Preferred site description:**
 
-<!-- Aim for roughly one or two concise sentences. -->
+Salih Güler is a Senior Developer Advocate at AWS focused on frontend and mobile app development, developer experience, and serverless architecture.
 
 **Default sharing image URL:**
 
-**Topics or keywords associated with your work:**
+**Topics or keywords associated with your work:** Frontend development, mobile app development, developer experience, serverless architecture, developer advocacy
 
 ## Additional Notes
 

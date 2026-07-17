@@ -1,4 +1,4 @@
-export type SocialKey = "linkedin" | "x" | "github" | "instagram";
+export type SocialKey = "linkedin" | "x" | "github" | "bluesky";
 
 export type SocialLink = {
   label: string;
@@ -11,6 +11,7 @@ export type Conference = {
   location: string;
   date: string;
   href?: string;
+  role?: string;
 };
 
 export const site = {
@@ -18,15 +19,31 @@ export const site = {
   shortName: "Salih",
   url: "https://salih.dev",
   description:
-    "Notes on software engineering, developer communities, travel, and building systems that stay understandable.",
+    "Salih Güler is a Senior Developer Advocate at AWS focused on frontend and mobile app development, developer experience, and serverless architecture.",
   defaultImage:
     "https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=1600&q=82",
-  email: "hello@salih.dev",
-  role: "Software engineer, speaker, and community builder",
+  email: null,
+  role: "Senior Developer Advocate at AWS",
+  jobTitle: "Senior Developer Advocate",
+  organization: "AWS",
+  bio: {
+    short:
+      "Salih is a Senior Developer Advocate at AWS with a strong focus on frontend and mobile app development, developer experience, and serverless architecture.",
+    long: [
+      "I am a Senior Developer Advocate at AWS based in Berlin, Germany. My work focuses on frontend and mobile app development, developer experience, and serverless architecture.",
+      "I help developers turn complex technical ideas into approachable, practical solutions. I also speak at developer conferences and community events, sharing lessons from the intersection of client applications, cloud systems, and developer tooling.",
+    ],
+  },
+  focusAreas: [
+    "Frontend development",
+    "Mobile app development",
+    "Developer experience",
+    "Serverless architecture",
+  ],
   location: {
     city: "Berlin",
     country: "Germany",
-    updated: "July 2026",
+    updated: null,
     coordinates: {
       x: 53,
       y: 32,
@@ -41,48 +58,42 @@ export const site = {
   socials: [
     {
       label: "LinkedIn",
-      href: "https://www.linkedin.com/",
+      href: "https://www.linkedin.com/in/salihgueler",
       icon: "linkedin",
     },
     {
       label: "X",
-      href: "https://x.com/",
+      href: "https://x.com/salihgueler",
       icon: "x",
     },
     {
       label: "GitHub",
-      href: "https://github.com/",
+      href: "https://github.com/salihgueler",
       icon: "github",
     },
     {
-      label: "Instagram",
-      href: "https://www.instagram.com/",
-      icon: "instagram",
+      label: "Bluesky",
+      href: "https://bsky.app/profile/salihgueler.dev",
+      icon: "bluesky",
     },
   ] satisfies SocialLink[],
   conferences: {
     upcoming: [
       {
-        name: "Community Systems Forum",
-        location: "Amsterdam, Netherlands",
-        date: "October 15, 2026",
+        name: "Agentcon London",
+        location: "London, United Kingdom",
+        date: "September 8, 2026",
+        href: "https://globalai.community/e/x79ncrl7",
+        role: "Speaker",
       },
     ],
     recent: [
       {
-        name: "Open Source Summit",
+        name: "WeAreDevelopers",
         location: "Berlin, Germany",
-        date: "May 12, 2026",
-      },
-      {
-        name: "Developer Experience Days",
-        location: "Lisbon, Portugal",
-        date: "November 7, 2025",
-      },
-      {
-        name: "Mobile Makers",
-        location: "London, United Kingdom",
-        date: "September 18, 2025",
+        date: "July 8, 2026",
+        href: "https://www.wearedevelopers.com/",
+        role: "Speaker",
       },
     ],
   } satisfies Record<"upcoming" | "recent", Conference[]>,

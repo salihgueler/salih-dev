@@ -57,11 +57,11 @@ function homeDocument(posts: CollectionEntry<"blog">[]): string {
   const conferences = [
     ...site.conferences.upcoming.map(
       (conference) =>
-        `- ${conference.name}, ${conference.location} — ${conference.date}`,
+        `- ${conference.href ? `[${conference.name}](${conference.href})` : conference.name}${conference.role ? ` (${conference.role})` : ""}, ${conference.location} — ${conference.date}`,
     ),
     ...site.conferences.recent.map(
       (conference) =>
-        `- ${conference.name}, ${conference.location} — ${conference.date}`,
+        `- ${conference.href ? `[${conference.name}](${conference.href})` : conference.name}${conference.role ? ` (${conference.role})` : ""}, ${conference.location} — ${conference.date}`,
     ),
   ];
 
@@ -87,9 +87,12 @@ function aboutDocument(): string {
   return [
     `# About ${site.name}`,
     "",
-    `${site.name} is a ${site.role.toLowerCase()} based in ${site.location.city}, ${site.location.country}.`,
+    site.bio.short,
     "",
-    "This site collects durable notes on maintainable systems, developer experience, technical communication, community infrastructure, and remote work.",
+    ...site.bio.long.flatMap((paragraph) => [paragraph, ""]),
+    "## Areas of focus",
+    "",
+    ...site.focusAreas.map((area) => `- ${area}`),
     "",
   ].join("\n");
 }
@@ -102,8 +105,9 @@ function contactDocument(): string {
   return [
     `# Contact ${site.name}`,
     "",
-    `Email: [${site.email}](mailto:${site.email})`,
-    "",
+    ...(site.email
+      ? [`Email: [${site.email}](mailto:${site.email})`, ""]
+      : []),
     "## Social profiles",
     "",
     socialLinks.join("\n"),

@@ -28,7 +28,8 @@ import { site } from "../config/site";
     </div>
     <p>
       {site.name} is currently based in {site.location.city},{" "}
-      {site.location.country}. Last updated {site.location.updated}.
+      {site.location.country}.
+      {site.location.updated && ` Last updated ${site.location.updated}.`}
     </p>
     <a
       class="attribution"
@@ -46,7 +47,14 @@ import { site } from "../config/site";
       {
         site.conferences.upcoming.map((conference) => (
           <li>
-            <strong>{conference.name}</strong>
+            {conference.href ? (
+              <a href={conference.href} target="_blank" rel="noopener noreferrer">
+                <strong>{conference.name}</strong>
+              </a>
+            ) : (
+              <strong>{conference.name}</strong>
+            )}
+            {conference.role && <span>{conference.role}</span>}
             <span>{conference.location}</span>
             <time>{conference.date}</time>
           </li>
@@ -61,7 +69,14 @@ import { site } from "../config/site";
       {
         site.conferences.recent.map((conference) => (
           <li>
-            <strong>{conference.name}</strong>
+            {conference.href ? (
+              <a href={conference.href} target="_blank" rel="noopener noreferrer">
+                <strong>{conference.name}</strong>
+              </a>
+            ) : (
+              <strong>{conference.name}</strong>
+            )}
+            {conference.role && <span>{conference.role}</span>}
             <span>{conference.location}</span>
             <time>{conference.date}</time>
           </li>
