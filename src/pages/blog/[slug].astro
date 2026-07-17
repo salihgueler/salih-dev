@@ -1,0 +1,86 @@
+---
+import { getCollection, render } from "astro:content";
+
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { formatDate, slugify } from "../../lib/content";
+
+const slug = Astro.params.slug;
+const posts = await getCollection("blog", ({ data }) => !data.draft);
+const post = posts.find((entry) => entry.id === slug);
+
+if (!post) {
+  return new Response("Post not found", {
+    status: 404,
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  });
+}
+
+const { Content } = await render(post);
+const canonical = post.data.canonical ?? new URL(`/blog/${post.id}/`, Astro.site);
+---
+
+<BaseLayout
+  title={post.data.title}
+  description={post.data.description}
+  image={post.data.hero.src}
+  canonical={canonical.toString()}
+  bodyClass="article-page"
+>
+  <article class="article-shell">
+    <header class="article-header">
+      <p class="archive-kicker">{post.data.category}</p>
+      <h1>{post.data.title}</h1>
+      <p class="post-meta">
+        <time datetime={post.data.pubDate.toISOString()}>
+          Published {formatDate(post.data.pubDate)}
+        </time>
+        {
+          post.data.updatedDate && (
+            <>
+              <span aria-hidden="true">/</span>
+              <time datetime={post.data.updatedDate.toISOString()}>
+                Updated {formatDate(post.data.updatedDate)}
+              </time>
+            </>
+          )
+        }
+      </p>
+      <p class="article-summary">
+        <strong>Summary:</strong> {post.data.aiSummary}
+      </p>
+    </header>
+
+    <figure>
+      <div class="article-hero">
+        <img
+          src={post.data.hero.src}
+          alt={post.data.hero.alt}
+          width="1600"
+          height="800"
+          decoding="async"
+        />
+      </div>
+      <figcaption class="image-credit">
+        Image: <a
+          href={post.data.hero.creditUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {post.data.hero.credit}
+        </a>
+      </figcaption>
+    </figure>
+
+    <div class="article-body">
+      <Content />
+    </div>
+
+    <ul class="tag-list" aria-label="Post tags">
+      {
+        post.data.tags.map((tag) => (
+          <li><a href={`/tags/${slugify(tag)}/`}>#{tag}</a></li>
+        ))
+      }
+    </ul>
+  </article>
+</BaseLayout>

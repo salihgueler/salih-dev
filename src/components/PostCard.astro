@@ -1,0 +1,43 @@
+---
+import type { CollectionEntry } from "astro:content";
+
+import { formatDate, postUrl, slugify } from "../lib/content";
+
+interface Props {
+  post: CollectionEntry<"blog">;
+}
+
+const { post } = Astro.props;
+---
+
+<article class="post-card">
+  <a class="post-image" href={postUrl(post)} tabindex="-1" aria-hidden="true">
+    <img
+      src={post.data.hero.src}
+      alt=""
+      width="1200"
+      height="520"
+      loading="lazy"
+      decoding="async"
+    />
+  </a>
+  <div class="post-card-body">
+    <h3><a href={postUrl(post)}>{post.data.title}</a></h3>
+    <p class="post-meta">
+      <time datetime={post.data.pubDate.toISOString()}>
+        {formatDate(post.data.pubDate)}
+      </time>
+      <span aria-hidden="true">/</span>
+      <a href={`/categories/${slugify(post.data.category)}/`}>
+        {post.data.category}
+      </a>
+    </p>
+    <p class="ai-summary">
+      <strong>AI summary:</strong> {post.data.aiSummary}
+    </p>
+    <p class="post-description">{post.data.description}</p>
+    <a class="read-more" href={postUrl(post)} aria-label={`Read ${post.data.title}`}>
+      Read post <span aria-hidden="true">-&gt;</span>
+    </a>
+  </div>
+</article>

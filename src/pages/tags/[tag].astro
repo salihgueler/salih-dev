@@ -1,0 +1,36 @@
+---
+import PostCard from "../../components/PostCard.astro";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { getPublishedPosts, slugify } from "../../lib/content";
+
+const tag = Astro.params.tag ?? "";
+const allPosts = await getPublishedPosts();
+const posts = allPosts.filter((post) =>
+  post.data.tags.some((value) => slugify(value) === tag.toLowerCase()),
+);
+const displayName =
+  posts.flatMap((post) => post.data.tags).find((value) => slugify(value) === tag) ??
+  tag.replaceAll("-", " ");
+
+if (posts.length === 0) {
+  Astro.response.status = 404;
+}
+---
+
+<BaseLayout title={`Tag: ${displayName}`} description={`Posts tagged ${displayName}.`}>
+  <header class="page-intro">
+    <h1>#{displayName}</h1>
+    <p>{posts.length} {posts.length === 1 ? "post" : "posts"} with this tag.</p>
+  </header>
+  <section class="archive-list" aria-label={`Posts tagged ${displayName}`}>
+    {
+      posts.length > 0 ? (
+        <div class="post-grid">
+          {posts.map((post) => <PostCard post={post} />)}
+        </div>
+      ) : (
+        <p class="empty-state">No posts found with this tag.</p>
+      )
+    }
+  </section>
+</BaseLayout>

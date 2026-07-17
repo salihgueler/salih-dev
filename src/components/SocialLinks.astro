@@ -1,0 +1,43 @@
+---
+import {
+  siGithub,
+  siInstagram,
+  siX,
+  type SimpleIcon,
+} from "simple-icons";
+
+import { site, type SocialKey } from "../config/site";
+
+const icons: Partial<Record<SocialKey, SimpleIcon>> = {
+  x: siX,
+  github: siGithub,
+  instagram: siInstagram,
+};
+---
+
+<ul class="social-links" aria-label="Social profiles">
+  {
+    site.socials.map((social) => {
+      const icon = icons[social.icon];
+      return (
+        <li>
+          <a
+            href={social.href}
+            aria-label={social.label}
+            title={social.label}
+            rel="me noopener noreferrer"
+            target="_blank"
+          >
+            {icon ? (
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d={icon.path} />
+              </svg>
+            ) : (
+              <span class="linkedin-glyph" aria-hidden="true">in</span>
+            )}
+          </a>
+        </li>
+      );
+    })
+  }
+</ul>

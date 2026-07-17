@@ -1,0 +1,15 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+Astro.response.status = 404;
+---
+
+<BaseLayout title="Page not found" description="The requested page could not be found.">
+  <article class="prose-page">
+    <h1>404</h1>
+    <div class="prose-page-content">
+      <p>The page you requested is not here, or its address has changed.</p>
+      <p><a href="/">Return home</a></p>
+    </div>
+  </article>
+</BaseLayout>

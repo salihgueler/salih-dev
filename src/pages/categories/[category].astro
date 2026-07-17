@@ -1,0 +1,37 @@
+---
+import PostCard from "../../components/PostCard.astro";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { getPublishedPosts, slugify } from "../../lib/content";
+
+const category = Astro.params.category ?? "";
+const allPosts = await getPublishedPosts();
+const posts = allPosts.filter(
+  (post) => slugify(post.data.category) === category.toLowerCase(),
+);
+const displayName = posts[0]?.data.category ?? category.replaceAll("-", " ");
+
+if (posts.length === 0) {
+  Astro.response.status = 404;
+}
+---
+
+<BaseLayout
+  title={`Category: ${displayName}`}
+  description={`Posts filed under ${displayName}.`}
+>
+  <header class="page-intro">
+    <h1>{displayName}</h1>
+    <p>{posts.length} {posts.length === 1 ? "post" : "posts"} in this category.</p>
+  </header>
+  <section class="archive-list" aria-label={`Posts in ${displayName}`}>
+    {
+      posts.length > 0 ? (
+        <div class="post-grid">
+          {posts.map((post) => <PostCard post={post} />)}
+        </div>
+      ) : (
+        <p class="empty-state">No posts found in this category.</p>
+      )
+    }
+  </section>
+</BaseLayout>

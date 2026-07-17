@@ -1,0 +1,25 @@
+---
+import PostCard from "../../components/PostCard.astro";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { getPublishedPosts } from "../../lib/content";
+
+const posts = await getPublishedPosts();
+---
+
+<BaseLayout
+  title="Blog"
+  description="Writing on software engineering, community, travel, and thoughtful technical practice."
+>
+  <header class="page-intro">
+    <h1>Blog</h1>
+    <p>
+      Essays and field notes about software, teams, communities, and the habits
+      that make technical work easier to understand.
+    </p>
+  </header>
+  <section class="archive-list" aria-label="All blog posts">
+    <div class="post-grid">
+      {posts.map((post) => <PostCard post={post} />)}
+    </div>
+  </section>
+</BaseLayout>

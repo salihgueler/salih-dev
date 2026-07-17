@@ -1,0 +1,33 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { site } from "../config/site";
+---
+
+<BaseLayout
+  title="Contact"
+  description={`Contact ${site.name} about engineering, speaking, writing, or community work.`}
+>
+  <article class="prose-page">
+    <h1>Contact</h1>
+    <div class="prose-page-content">
+      <p>
+        The clearest way to reach me is email. A little context about the work,
+        event, or question helps me reply usefully.
+      </p>
+      <div class="contact-links">
+        <a href={`mailto:${site.email}`}>
+          <span>Email</span>
+          <span>{site.email}</span>
+        </a>
+        {
+          site.socials.map((social) => (
+            <a href={social.href} target="_blank" rel="noopener noreferrer">
+              <span>{social.label}</span>
+              <span aria-hidden="true">-&gt;</span>
+            </a>
+          ))
+        }
+      </div>
+    </div>
+  </article>
+</BaseLayout>

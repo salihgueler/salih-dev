@@ -1,0 +1,33 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { site } from "../config/site";
+---
+
+<BaseLayout
+  title="About"
+  description={`About ${site.name}, ${site.role.toLowerCase()}.`}
+>
+  <article class="prose-page">
+    <h1>About</h1>
+    <div class="prose-page-content">
+      <p>
+        I am {site.name}, a {site.role.toLowerCase()} based in{" "}
+        {site.location.city}. I care about software that remains legible after
+        the first release and communities that make room for new contributors.
+      </p>
+      <p>
+        My work sits between engineering, writing, and the practical design of
+        collaboration. This site is where I keep durable notes from that work:
+        patterns worth repeating, assumptions worth challenging, and field
+        observations from teams and events.
+      </p>
+      <h2>What I write about</h2>
+      <p>
+        Expect notes on maintainable systems, developer experience, technical
+        communication, community infrastructure, and the occasional moving
+        desk. The details here are editable placeholders for the first version
+        of the site.
+      </p>
+    </div>
+  </article>
+</BaseLayout>

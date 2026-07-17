@@ -1,0 +1,29 @@
+---
+import { navigation, site } from "../config/site";
+import SocialLinks from "./SocialLinks.astro";
+
+const pathname = Astro.url.pathname;
+---
+
+<header class="site-header">
+  <a class="wordmark" href="/" aria-label={`${site.name}, home`}>{site.name}</a>
+  <div class="header-links">
+    <SocialLinks />
+    <nav aria-label="Primary navigation">
+      <ul>
+        {
+          navigation.map((item) => (
+            <li>
+              <a
+                href={item.href}
+                aria-current={pathname.startsWith(item.href) ? "page" : undefined}
+              >
+                {item.label}
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </nav>
+  </div>
+</header>

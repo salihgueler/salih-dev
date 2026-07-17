@@ -1,17 +1,20 @@
 ---
+import LocationSidebar from "../components/LocationSidebar.astro";
+import PostCard from "../components/PostCard.astro";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { getPublishedPosts } from "../lib/content";
 
+const posts = await getPublishedPosts();
 ---
 
-<html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro</title>
-	</head>
-	<body>
-		<h1>Astro</h1>
-	</body>
-</html>
+<BaseLayout>
+  <div class="home-layout">
+    <LocationSidebar />
+    <section class="latest-posts" aria-labelledby="latest-heading">
+      <h1 class="section-heading" id="latest-heading">Latest blog posts</h1>
+      <div class="post-grid">
+        {posts.map((post) => <PostCard post={post} />)}
+      </div>
+    </section>
+  </div>
+</BaseLayout>

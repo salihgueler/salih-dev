@@ -1,0 +1,50 @@
+---
+import Footer from "../components/Footer.astro";
+import Header from "../components/Header.astro";
+import { site } from "../config/site";
+import "../styles/global.css";
+
+interface Props {
+  title?: string;
+  description?: string;
+  image?: string;
+  canonical?: string;
+  bodyClass?: string;
+}
+
+const {
+  title,
+  description = site.description,
+  image,
+  canonical = new URL(Astro.url.pathname, site.url).toString(),
+  bodyClass = "",
+} = Astro.props;
+
+const pageTitle = title ? `${title} | ${site.name}` : `${site.name} | ${site.role}`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="alternate" type="application/rss+xml" title={site.name} href="/rss.xml" />
+    <title>{pageTitle}</title>
+    {image && <meta property="og:image" content={image} />}
+    <slot name="head" />
+  </head>
+  <body class={bodyClass}>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <div class="site-shell">
+      <Header />
+      <main id="main-content">
+        <slot />
+      </main>
+      <Footer />
+    </div>
+  </body>
+</html>
