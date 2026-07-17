@@ -17,14 +17,62 @@ if (!post) {
 
 const { Content } = await render(post);
 const canonical = post.data.canonical ?? new URL(`/blog/${post.id}/`, Astro.site);
+const articleStructuredData = [
+  {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    headline: post.data.title,
+    description: post.data.description,
+    image: post.data.hero.src,
+    datePublished: post.data.pubDate.toISOString(),
+    dateModified: (post.data.updatedDate ?? post.data.pubDate).toISOString(),
+    mainEntityOfPage: canonical.toString(),
+    inLanguage: "en",
+    keywords: [post.data.category, ...post.data.tags].join(", "),
+    author: {
+      "@type": "Person",
+      name: "Salih Güler",
+      url: "https://salih.dev",
+    },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "Home",
+        item: "https://salih.dev/",
+      },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Blog",
+        item: "https://salih.dev/blog/",
+      },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: post.data.title,
+        item: canonical.toString(),
+      },
+    ],
+  },
+];
 ---
 
 <BaseLayout
   title={post.data.title}
   description={post.data.description}
   image={post.data.hero.src}
+  imageAlt={post.data.hero.alt}
   canonical={canonical.toString()}
   bodyClass="article-page"
+  pageType="article"
+  publishedTime={post.data.pubDate.toISOString()}
+  updatedTime={(post.data.updatedDate ?? post.data.pubDate).toISOString()}
+  structuredData={articleStructuredData}
 >
   <article class="article-shell">
     <header class="article-header">

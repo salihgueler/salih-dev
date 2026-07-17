@@ -19,6 +19,8 @@ export const site = {
   url: "https://salih.dev",
   description:
     "Notes on software engineering, developer communities, travel, and building systems that stay understandable.",
+  defaultImage:
+    "https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=1600&q=82",
   email: "hello@salih.dev",
   role: "Software engineer, speaker, and community builder",
   location: {
