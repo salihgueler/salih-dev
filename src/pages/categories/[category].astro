@@ -1,7 +1,13 @@
 ---
 import PostCard from "../../components/PostCard.astro";
 import BaseLayout from "../../layouts/BaseLayout.astro";
-import { getPublishedPosts, slugify } from "../../lib/content";
+import {
+  getCategoryStaticPaths,
+  getPublishedPosts,
+  slugify,
+} from "../../lib/content";
+
+export const getStaticPaths = getCategoryStaticPaths;
 
 const category = Astro.params.category ?? "";
 const allPosts = await getPublishedPosts();

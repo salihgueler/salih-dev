@@ -27,3 +27,31 @@ export function slugify(value: string): string {
 export function postUrl(post: CollectionEntry<"blog">): string {
   return `/blog/${post.id}/`;
 }
+
+export async function getPostStaticPaths() {
+  const posts = await getPublishedPosts();
+  return posts.map((post) => ({
+    params: { slug: post.id },
+    props: { post },
+  }));
+}
+
+export async function getCategoryStaticPaths() {
+  const posts = await getPublishedPosts();
+  const categories = new Set(
+    posts.map((post) => slugify(post.data.category)),
+  );
+  return [...categories].map((category) => ({
+    params: { category },
+  }));
+}
+
+export async function getTagStaticPaths() {
+  const posts = await getPublishedPosts();
+  const tags = new Set(
+    posts.flatMap((post) => post.data.tags.map(slugify)),
+  );
+  return [...tags].map((tag) => ({
+    params: { tag },
+  }));
+}

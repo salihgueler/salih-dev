@@ -1,7 +1,10 @@
 import type { APIRoute } from "astro";
 
+import { getPostStaticPaths } from "../../lib/content";
 import { markdownResponse } from "../../lib/http";
 import { markdownForPath } from "../../lib/markdown-documents";
+
+export const getStaticPaths = getPostStaticPaths;
 
 export const GET: APIRoute = async ({ params }) => {
   const canonicalPath = `/blog/${params.slug}/`;

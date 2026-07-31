@@ -31,7 +31,7 @@ npm run astro -- dev stop
 | --- | --- |
 | `npm run dev` | Start the Astro development server |
 | `npm run check` | Run Astro and TypeScript diagnostics |
-| `npm run build` | Build the standalone Node.js server |
+| `npm run build` | Build the static site into `dist/` |
 | `npm run preview` | Preview the production build locally |
 | `npm start` | Run the built server from `dist/` |
 | `npm run import:dev` | Import reviewed DEV Community posts |
@@ -91,12 +91,12 @@ content negotiation and discovery headers.
 ```sh
 npm run check
 npm run build
-npm start
+npm run preview
 ```
 
-The standalone server listens on port `4321` by default. Set `HOST` and `PORT`
-when the hosting environment requires different values:
+The production site is pre-rendered and does not require a Node.js server.
+AWS infrastructure, deployment steps, domain cutover, daily DEV synchronization,
+and cost estimates are documented in:
 
-```sh
-HOST=0.0.0.0 PORT=3000 npm start
-```
+- [`docs/aws-migration.md`](docs/aws-migration.md)
+- [`DEPLOY.md`](DEPLOY.md)

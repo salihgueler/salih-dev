@@ -1,7 +1,10 @@
 import type { APIRoute } from "astro";
 
+import { getCategoryStaticPaths } from "../../lib/content";
 import { markdownResponse } from "../../lib/http";
 import { markdownForPath } from "../../lib/markdown-documents";
+
+export const getStaticPaths = getCategoryStaticPaths;
 
 export const GET: APIRoute = async ({ params }) => {
   const canonicalPath = `/categories/${params.category}/`;

@@ -1,7 +1,10 @@
 # build output
 dist/
+infra/cdk.out/
 # generated types
 .astro/
+.cache/
+public/images/blog/
 
 # dependencies
 node_modules/

@@ -1,7 +1,13 @@
 ---
 import PostCard from "../../components/PostCard.astro";
 import BaseLayout from "../../layouts/BaseLayout.astro";
-import { getPublishedPosts, slugify } from "../../lib/content";
+import {
+  getPublishedPosts,
+  getTagStaticPaths,
+  slugify,
+} from "../../lib/content";
+
+export const getStaticPaths = getTagStaticPaths;
 
 const tag = Astro.params.tag ?? "";
 const allPosts = await getPublishedPosts();

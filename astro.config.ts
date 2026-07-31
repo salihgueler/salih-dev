@@ -1,4 +1,3 @@
-import node from "@astrojs/node";
 import { unified } from "@astrojs/markdown-remark";
 import sitemap from "@astrojs/sitemap";
 import { defineConfig } from "astro/config";
@@ -8,10 +7,7 @@ import remarkYouTube from "./src/lib/remark-youtube";
 
 export default defineConfig({
   site: "https://salih.dev",
-  output: "server",
-  adapter: node({
-    mode: "standalone",
-  }),
+  output: "static",
   integrations: [sitemap()],
   markdown: {
     processor: unified({

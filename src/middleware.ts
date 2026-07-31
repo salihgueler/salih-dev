@@ -10,6 +10,9 @@ import { markdownResponse } from "./lib/http";
 import { markdownForPath } from "./lib/markdown-documents";
 
 export const onRequest = defineMiddleware(async (context, next) => {
+  // Production request negotiation runs at CloudFront for the static build.
+  if (!import.meta.env.DEV) return next();
+
   const pathname = context.url.pathname;
 
   if (explicitlyPrefersMarkdown(context.request.headers.get("Accept"))) {
