@@ -6,12 +6,13 @@ updatedDate: "2026-04-17T08:21:22Z"
 category: "Serverless"
 tags: ["tdd","spec","serverless","aidlc"]
 hero:
-  src: "https://media2.dev.to/dynamic/image/width=1000,height=420,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2F74kyhuk4uqq2i9wv5fzn.jpg"
+  src: "https://salih.dev/images/blog/3500211-building-serverless-apis-with-tdd-and-ai-powered-spec-generation-2c36.webp"
   alt: "Cover image for Building Serverless APIs with TDD and AI-Powered Spec Generation"
   credit: "DEV Community"
   creditUrl: "https://dev.to/aws/building-serverless-apis-with-tdd-and-ai-powered-spec-generation-2c36"
 aiSummary: "Use AI-assisted specification generation to drive test-first development for serverless APIs, from OpenAPI contracts and unit tests through cloud integration testing."
 originalUrl: "https://dev.to/aws/building-serverless-apis-with-tdd-and-ai-powered-spec-generation-2c36"
+sources: [{"name":"DEV Community","url":"https://dev.to/aws/building-serverless-apis-with-tdd-and-ai-powered-spec-generation-2c36"}]
 draft: false
 ---
 

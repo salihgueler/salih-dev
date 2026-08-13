@@ -5,12 +5,13 @@ pubDate: "2025-05-14T08:57:26Z"
 category: "Dart"
 tags: ["cloud","backend","flutter","aws"]
 hero:
-  src: "https://media2.dev.to/dynamic/image/width=1000,height=420,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2Fy4p7c28zicv53rdv1rlt.png"
+  src: "https://salih.dev/images/blog/2485246-ai-guided-aws-deployment-for-your-dart-backend-applications-4g3a.webp"
   alt: "Cover image for AI-Guided AWS Deployment for Your Dart Backend Applications"
   credit: "DEV Community"
   creditUrl: "https://dev.to/salihgueler/ai-guided-aws-deployment-for-your-dart-backend-applications-4g3a"
 aiSummary: "Use Amazon Q Developer CLI to containerize and deploy Dart backend applications to AWS, covering REST APIs and WebSocket workloads."
 originalUrl: "https://dev.to/salihgueler/ai-guided-aws-deployment-for-your-dart-backend-applications-4g3a"
+sources: [{"name":"DEV Community","url":"https://dev.to/salihgueler/ai-guided-aws-deployment-for-your-dart-backend-applications-4g3a"}]
 draft: false
 ---
 

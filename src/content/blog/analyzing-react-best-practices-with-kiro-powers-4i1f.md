@@ -5,12 +5,13 @@ pubDate: "2026-01-21T08:59:21Z"
 category: "AI Development"
 tags: ["kiro","agents","ai","webdev"]
 hero:
-  src: "https://media2.dev.to/dynamic/image/width=1000,height=420,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2F0o8xlk9ickdpioyu7but.png"
+  src: "https://salih.dev/images/blog/3177666-analyzing-react-best-practices-with-kiro-powers-4i1f.webp"
   alt: "Cover image for Analyzing React Best Practices with Kiro Powers"
   credit: "DEV Community"
   creditUrl: "https://dev.to/kirodotdev/analyzing-react-best-practices-with-kiro-powers-4i1f"
 aiSummary: "Package React and Next.js best practices as a Kiro Power, then use it to audit AI-generated frontend code."
 originalUrl: "https://dev.to/kirodotdev/analyzing-react-best-practices-with-kiro-powers-4i1f"
+sources: [{"name":"DEV Community","url":"https://dev.to/kirodotdev/analyzing-react-best-practices-with-kiro-powers-4i1f"}]
 draft: false
 ---
 

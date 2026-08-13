@@ -6,12 +6,13 @@ updatedDate: "2026-06-18T13:26:54Z"
 category: "AWS Blocks"
 tags: ["aws","fullstack","blocks"]
 hero:
-  src: "https://media2.dev.to/dynamic/image/width=1000,height=420,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.us-east-2.amazonaws.com%2Fuploads%2Farticles%2Fykz2hjm0gzbwvjgksz5t.png"
+  src: "https://salih.dev/images/blog/3929764-building-a-world-cup-bracket-picker-with-aws-blocks-1k8.webp"
   alt: "Cover image for Building a World Cup Bracket Picker with AWS Blocks"
   credit: "DEV Community"
   creditUrl: "https://dev.to/aws/building-a-world-cup-bracket-picker-with-aws-blocks-1k8"
 aiSummary: "Create a full-stack World Cup bracket picker with AWS Blocks, combining authentication, structured data, real-time updates, scheduled jobs, and an AI agent."
 originalUrl: "https://dev.to/aws/building-a-world-cup-bracket-picker-with-aws-blocks-1k8"
+sources: [{"name":"DEV Community","url":"https://dev.to/aws/building-a-world-cup-bracket-picker-with-aws-blocks-1k8"}]
 draft: false
 ---
 

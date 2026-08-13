@@ -6,12 +6,13 @@ updatedDate: "2025-04-08T20:46:17Z"
 category: "Generative AI"
 tags: ["aws","genai","qcli","amazonbedrock"]
 hero:
-  src: "https://media2.dev.to/dynamic/image/width=1000,height=420,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2Fwp9mplbg1idvah0jqljt.png"
+  src: "https://salih.dev/images/blog/2391884-build-your-own-ai-podcast-co-host-step-by-step-with-amazon-q-cli-and-amazon-nova-sonic-2281.webp"
   alt: "Cover image for Build Your Own AI Podcast Co-Host: Step-by-Step with Amazon Q CLI and Amazon Nova Sonic"
   credit: "DEV Community"
   creditUrl: "https://dev.to/salihgueler/build-your-own-ai-podcast-co-host-step-by-step-with-amazon-q-cli-and-amazon-nova-sonic-2281"
 aiSummary: "Build a voice-based AI podcast co-host with Amazon Q CLI, Amazon Nova Sonic, Next.js, and bidirectional streaming through Amazon Bedrock."
 originalUrl: "https://dev.to/salihgueler/build-your-own-ai-podcast-co-host-step-by-step-with-amazon-q-cli-and-amazon-nova-sonic-2281"
+sources: [{"name":"DEV Community","url":"https://dev.to/salihgueler/build-your-own-ai-podcast-co-host-step-by-step-with-amazon-q-cli-and-amazon-nova-sonic-2281"}]
 draft: false
 ---
 

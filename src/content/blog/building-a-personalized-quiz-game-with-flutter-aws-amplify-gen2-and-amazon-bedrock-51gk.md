@@ -5,12 +5,13 @@ pubDate: "2024-01-28T15:44:55Z"
 category: "Flutter"
 tags: ["flutter","aws","awsamplify","bedrock"]
 hero:
-  src: "https://media2.dev.to/dynamic/image/width=1000,height=420,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2Fjgt2nmds0k3lz8x2px4c.png"
+  src: "https://salih.dev/images/blog/1743661-building-a-personalized-quiz-game-with-flutter-aws-amplify-gen2-and-amazon-bedrock-51gk.webp"
   alt: "Cover image for Building a Personalized Quiz Game with Flutter, AWS Amplify Gen2, and Amazon Bedrock!"
   credit: "DEV Community"
   creditUrl: "https://dev.to/salihgueler/building-a-personalized-quiz-game-with-flutter-aws-amplify-gen2-and-amazon-bedrock-51gk"
 aiSummary: "Build a personalized Flutter quiz game using AWS Amplify Gen 2, API Gateway, Lambda, and Amazon Bedrock."
 originalUrl: "https://dev.to/salihgueler/building-a-personalized-quiz-game-with-flutter-aws-amplify-gen2-and-amazon-bedrock-51gk"
+sources: [{"name":"DEV Community","url":"https://dev.to/salihgueler/building-a-personalized-quiz-game-with-flutter-aws-amplify-gen2-and-amazon-bedrock-51gk"}]
 draft: false
 ---
 

@@ -6,12 +6,13 @@ updatedDate: "2025-07-03T10:32:33Z"
 category: "Flutter"
 tags: ["flutter","mcp","flameengine","gamedev"]
 hero:
-  src: "https://media2.dev.to/dynamic/image/width=1000,height=420,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2Fto7yf6pq7fmfv0iboc84.png"
+  src: "https://salih.dev/images/blog/2644682-how-i-built-a-flame-engine-mcp-server-to-build-flutter-games-3ea2.webp"
   alt: "Cover image for How I Built a Flame Engine MCP Server to Build Flutter Games"
   credit: "DEV Community"
   creditUrl: "https://dev.to/salihgueler/how-i-built-a-flame-engine-mcp-server-to-build-flutter-games-3ea2"
 aiSummary: "Build an MCP server for the Flutter Flame engine that gives coding assistants contextual documentation, examples, and game-development support."
 originalUrl: "https://dev.to/salihgueler/how-i-built-a-flame-engine-mcp-server-to-build-flutter-games-3ea2"
+sources: [{"name":"DEV Community","url":"https://dev.to/salihgueler/how-i-built-a-flame-engine-mcp-server-to-build-flutter-games-3ea2"}]
 draft: false
 ---
 

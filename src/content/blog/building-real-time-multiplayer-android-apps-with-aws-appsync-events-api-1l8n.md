@@ -5,12 +5,13 @@ pubDate: "2025-09-03T11:31:29Z"
 category: "Mobile"
 tags: ["android","aws","kotlin","gamedev"]
 hero:
-  src: "https://media2.dev.to/dynamic/image/width=1000,height=420,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2Frdogxnkx4grloyzea6y8.png"
+  src: "https://salih.dev/images/blog/2815369-building-real-time-multiplayer-android-apps-with-aws-appsync-events-api-1l8n.webp"
   alt: "Cover image for Building Real-Time Multiplayer Android Apps with AWS AppSync Events API"
   credit: "DEV Community"
   creditUrl: "https://dev.to/aws/building-real-time-multiplayer-android-apps-with-aws-appsync-events-api-1l8n"
 aiSummary: "Build a real-time multiplayer Android quiz app with Kotlin and AWS AppSync Events API, including infrastructure, events, and game-state synchronization."
 originalUrl: "https://dev.to/aws/building-real-time-multiplayer-android-apps-with-aws-appsync-events-api-1l8n"
+sources: [{"name":"DEV Community","url":"https://dev.to/aws/building-real-time-multiplayer-android-apps-with-aws-appsync-events-api-1l8n"}]
 draft: false
 ---
 

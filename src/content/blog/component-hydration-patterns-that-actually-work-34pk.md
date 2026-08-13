@@ -6,13 +6,13 @@ updatedDate: "2026-03-26T10:20:08Z"
 category: "Web Development"
 tags: ["dart","jaspr","webdev","ai"]
 hero:
-  src: "https://media2.dev.to/dynamic/image/width=1000,height=420,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2F0ut8qprbibffefbkpzpj.png"
+  src: "https://salih.dev/images/blog/3405099-component-hydration-patterns-that-actually-work-34pk.webp"
   alt: "Cover image for Component hydration patterns that actually work with Jaspr"
   credit: "DEV Community"
   creditUrl: "https://dev.to/salihgueler/component-hydration-patterns-that-actually-work-34pk"
 aiSummary: "Compare hydration strategies and show how Jaspr synchronizes server-rendered component state with the client without manual serialization."
-sources: [{"name":"Medium","url":"https://medium.com/flutter-community/component-hydration-patterns-that-actually-work-with-jaspr-6bc9cf004809"}]
 originalUrl: "https://dev.to/salihgueler/component-hydration-patterns-that-actually-work-34pk"
+sources: [{"name":"DEV Community","url":"https://dev.to/salihgueler/component-hydration-patterns-that-actually-work-34pk"}]
 draft: false
 ---
 

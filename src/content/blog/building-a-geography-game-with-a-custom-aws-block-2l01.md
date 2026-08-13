@@ -6,12 +6,13 @@ updatedDate: "2026-07-02T13:27:20Z"
 category: "AWS Blocks"
 tags: ["aws","blocks","awsblocks","map"]
 hero:
-  src: "https://media2.dev.to/dynamic/image/width=1000,height=420,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.us-east-2.amazonaws.com%2Fuploads%2Farticles%2Fmzdd75isr5ov0zgnj0xp.png"
+  src: "https://salih.dev/images/blog/3969438-building-a-geography-game-with-a-custom-aws-block-2l01.webp"
   alt: "Cover image for Building a Geography Game with a Custom Building Block with AWS Blocks"
   credit: "DEV Community"
   creditUrl: "https://dev.to/aws/building-a-geography-game-with-a-custom-aws-block-2l01"
 aiSummary: "Build a custom AWS Block that wraps Google Maps, supports offline local development, and powers a geography guessing game that deploys unchanged to AWS."
 originalUrl: "https://dev.to/aws/building-a-geography-game-with-a-custom-aws-block-2l01"
+sources: [{"name":"DEV Community","url":"https://dev.to/aws/building-a-geography-game-with-a-custom-aws-block-2l01"}]
 draft: false
 ---
 

@@ -12,7 +12,7 @@ const blog = defineCollection({
     category: z.string(),
     tags: z.array(z.string()).default([]),
     hero: z.object({
-      src: z.url(),
+      src: z.string(),
       alt: z.string(),
       credit: z.string(),
       creditUrl: z.url(),
