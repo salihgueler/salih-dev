@@ -26,10 +26,12 @@ import * as sqs from "aws-cdk-lib/aws-sqs";
 import { NagSuppressions } from "cdk-nag";
 import type { Construct } from "constructs";
 
+import { Analytics } from "./analytics";
 import {
   viewerRequestCode,
   viewerResponseCode,
 } from "./edge-functions";
+import { Monitoring } from "./monitoring";
 
 export interface SalihDevDeliveryStackProps extends StackProps {
   readonly contentBucket: s3.IBucket;
@@ -159,6 +161,8 @@ export class SalihDevDeliveryStack extends Stack {
         cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
       priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
     });
+
+    new Analytics(this, { distribution });
 
     for (const recordName of [props.domainName, `www.${props.domainName}`]) {
       new route53.ARecord(this, `Ipv4Alias${recordName}`, {
@@ -319,6 +323,14 @@ export class SalihDevDeliveryStack extends Stack {
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
     });
     buildAlarm.addAlarmAction(new actions.SnsAction(alarmTopic));
+
+    // --- Operational monitoring: CloudFront errors and scheduled homepage check ---
+    new Monitoring(this, {
+      alarmTopic,
+      distribution,
+      distributionId: distribution.distributionId,
+      domainName: props.domainName,
+    });
 
     NagSuppressions.addResourceSuppressions(siteBucket, [
       {
