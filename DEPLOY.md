@@ -10,6 +10,7 @@ npm ci
 npm test
 npm run check
 npm run build
+npm run verify:build
 
 cd infra
 npm ci
@@ -20,24 +21,30 @@ npm run synth
 
 ## 2. Authenticate and bootstrap
 
-Use `us-east-1` because CloudFront requires its ACM certificate there.
+Production uses the `personal` AWS CLI profile and `us-east-1`, where CloudFront
+requires its ACM certificate. Authenticate in the user's terminal, then verify
+the identity before any CDK command:
 
 ```sh
-aws sts get-caller-identity
+aws login --profile personal
+export AWS_PROFILE=personal
 export CDK_DEFAULT_REGION=us-east-1
+aws sts get-caller-identity
 export CDK_DEFAULT_ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
 
 cd infra
 npx cdk bootstrap "aws://${CDK_DEFAULT_ACCOUNT}/${CDK_DEFAULT_REGION}"
 ```
 
-Run `npx cdk diff --strict` before every deployment.
+Stop if the returned account is not the intended personal account. Run
+`npx cdk diff --strict --no-change-set` before every deployment. Diff is a
+read-only review step; deployment still requires separate explicit approval.
 
 ## 3. Deploy retained state
 
 ```sh
 cd infra
-npx cdk diff SalihDevState --strict
+npx cdk diff SalihDevState --strict --no-change-set
 npx cdk deploy SalihDevState --strict
 ```
 
@@ -50,7 +57,7 @@ Start the delivery deployment:
 
 ```sh
 cd infra
-npx cdk diff SalihDevDelivery --strict
+npx cdk diff SalihDevDelivery --strict --no-change-set
 npx cdk deploy SalihDevDelivery --strict
 ```
 
@@ -123,7 +130,52 @@ curl -fsSI https://salih.dev/sitemap.xml
 For negotiated HTML and Markdown routes, verify `Content-Signal`, `Link`, and
 `Vary: Accept` headers.
 
-## 8. Operations
+## 8. Analytics and operations
+
+CloudFront standard logs v2 arrive as privacy-filtered JSON in the retained
+`AnalyticsBucketName` bucket and expire after 90 days. The delivery excludes IP
+addresses, cookies, query strings, user agents, and full referrers. Use the
+`salih_dev_analytics` Glue database and `salih-dev-analytics` Athena workgroup.
+Three saved queries provide top content, daily traffic/errors, and edge p95
+performance.
+
+List or run the saved queries:
+
+```sh
+aws athena list-named-queries \
+  --work-group salih-dev-analytics \
+  --region us-east-1
+aws athena start-query-execution \
+  --query-string 'SELECT * FROM salih_dev_analytics.cloudfront_access_logs LIMIT 20' \
+  --query-execution-context Database=salih_dev_analytics \
+  --work-group salih-dev-analytics \
+  --region us-east-1
+```
+
+Open the `salih-dev-operations` CloudWatch dashboard for request volume, 4xx and
+5xx rates, homepage check invocations and errors, and p95 request duration. An
+EventBridge rule invokes the lightweight Lambda check every 15 minutes; it
+verifies the homepage HTTP status and title without a browser runtime. CloudFront
+and homepage-check alarms publish to `BuildAlarmTopicArn`; subscribe and confirm
+an email endpoint if notifications are wanted.
+
+Use the `HomepageCheckFunctionName` and `HomepageCheckScheduleName` stack outputs
+when inspecting the checker:
+
+```sh
+aws cloudwatch get-dashboard \
+  --dashboard-name salih-dev-operations \
+  --region us-east-1
+aws lambda get-function-configuration \
+  --function-name <homepage-check-function-name> \
+  --region us-east-1
+aws events describe-rule \
+  --name <homepage-check-schedule-name> \
+  --region us-east-1
+aws cloudwatch describe-alarms \
+  --alarm-name-prefix SalihDevDelivery \
+  --region us-east-1
+```
 
 Manually rerun synchronization:
 
@@ -131,9 +183,7 @@ Manually rerun synchronization:
 aws codebuild start-build --project-name <publisher-project-name>
 ```
 
-Inspect the scheduler DLQ and CodeBuild logs when an alarm fires. Subscribe an
-email endpoint to `BuildAlarmTopicArn` and confirm the subscription.
-
+Inspect the scheduler DLQ and CodeBuild logs when a publication alarm fires.
 Rollback site content by restoring a previous S3 object version or publishing
-a previously verified source revision. Route 53 and both buckets have retention
-protection; deleting a CDK stack does not delete retained content.
+a previously verified source revision. Route 53 and retained buckets remain
+protected; deleting a CDK stack does not delete retained content.

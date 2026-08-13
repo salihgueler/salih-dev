@@ -9,12 +9,13 @@ The application exposes its locally verifiable readiness state at:
 
 ## DNS-AID
 
-DNS configuration is intentionally marked unavailable in the manifest because
-deployment and DNS management are outside this repository.
+DNS-AID remains marked unavailable because the discovery convention and TXT
+owner name have not been finalized. Route 53 infrastructure is managed in this
+repository, but DNS publication is intentionally separate from stack deployment.
 
-When a hosting provider and the final DNS-AID convention are selected, publish
-a TXT record that points agents to the readiness manifest. The deployment
-record should carry this value:
+After domain cutover and confirmation of the current DNS-AID specification, add
+a TXT record to the Route 53 hosted zone that points agents to the readiness
+manifest:
 
 ```text
 manifest=https://salih.dev/.well-known/agent-readiness.json

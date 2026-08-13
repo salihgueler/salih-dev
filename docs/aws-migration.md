@@ -20,7 +20,14 @@ The architecture uses:
 - AWS CodeBuild with Lambda compute for synchronization and static builds.
 - Amazon EventBridge Scheduler for the daily trigger.
 - Amazon SQS as the scheduler dead-letter queue.
-- CloudWatch and Amazon SNS for failed-build alarms.
+- CloudWatch and Amazon SNS for build, availability, and error-rate alarms,
+  plus an operations dashboard.
+- EventBridge and an arm64 Lambda function for a 15-minute homepage HTTP status
+  and title check without a browser runtime.
+- CloudFront standard logging v2 to a dedicated encrypted S3 bucket with a
+  90-day lifecycle, a Glue table, an Athena workgroup, and saved queries. The
+  selected fields omit IP addresses, cookies, query strings, user agents, and
+  full referrers.
 
 This design has no container or server in the website serving path. CodeBuild
 uses short-lived AWS Lambda compute for build automation.
@@ -73,8 +80,10 @@ skipped if any validation or build command fails.
 
 ### Phase 2: AWS foundation
 
-6. Authenticate to the intended AWS account in `us-east-1`.
-7. Bootstrap that account and Region for AWS CDK.
+6. Authenticate the `personal` AWS CLI profile and verify its account ID in
+   `us-east-1`; stop if it is not the intended personal account.
+7. Bootstrap that account and Region for AWS CDK if `CDKToolkit` is absent or
+   below the required bootstrap version.
 8. Deploy `SalihDevState` to create the retained content bucket and Route 53
    hosted zone.
 9. Record the four Route 53 nameservers but do not change Squarespace yet.
@@ -137,26 +146,36 @@ The checks and commands are listed in `DEPLOY.md`.
 
 Assumptions: 100,000 viewer requests, 10 GB transfer, 2 GB combined S3
 storage, and 31 daily builds of no more than 180 seconds on Lambda x86 1 GB
-compute. Prices are estimates for `us-east-1` as of July 2026 and exclude tax.
+compute. Prices are estimates for `us-east-1` as of August 2026 and exclude tax.
 
-| Service | Expected with ongoing allowances | Before allowances |
+| Service | Likely with ongoing allowances | Conservative paid usage |
 | --- | ---: | ---: |
 | Route 53 hosted zone | $0.50 | $0.50 |
 | Route 53 alias queries to CloudFront | $0.00 | $0.00 |
 | CloudFront transfer and requests | $0.00 | about $0.95 |
-| S3 storage and requests | about $0.05 | about $0.05 |
+| S3 storage and requests, including 90-day analytics retention | about $0.08 | about $0.08 |
 | CodeBuild Lambda compute, 5,580 seconds | $0.00 | about $0.06 |
-| EventBridge Scheduler | $0.00 | less than $0.01 |
+| EventBridge schedules and rules | $0.00 | less than $0.01 |
 | SQS dead-letter queue | $0.00 | less than $0.01 |
 | ACM public certificate | $0.00 | $0.00 |
-| CloudWatch logs, alarm, and SNS | about $0.01 | about $0.01 |
-| **Estimated total** | **about $0.56/month** | **about $1.58/month** |
+| CloudWatch logs, dashboard, alarms, and SNS | about $0.01 | about $3.50 |
+| Scheduled arm64 Lambda homepage check | $0.00 | less than $0.01 |
+| CloudFront standard logs v2 and occasional Athena queries | less than $0.05 | less than $0.05 |
+| **Estimated total** | **about $0.65/month** | **about $5.20/month** |
+
+The likely estimate assumes this dashboard remains within CloudWatch's first
+three free custom dashboards and the alarms remain within the first 10 free
+alarm metrics. If those account-level allowances are already consumed, the
+custom dashboard accounts for $3.00 of the conservative estimate and can be
+removed without affecting alarms or SNS notifications.
 
 CloudFront's pay-as-you-go free tier includes 1 TB of transfer and 10 million
 requests each month. CodeBuild includes 6,000 Lambda 1 GB build seconds each
-month. Route 53 does not charge for alias queries to CloudFront. A CloudFront
-Free flat-rate plan may cover additional services, but it is not assumed by
-this infrastructure or estimate.
+month. Route 53 does not charge for alias queries to CloudFront. The homepage
+check's approximately 2,976 short arm64 Lambda invocations per month ordinarily
+fit within Lambda and EventBridge ongoing allowances. A CloudFront Free flat-rate
+plan may cover additional services, but it is not assumed by this infrastructure
+or estimate.
 
 Pricing references:
 
@@ -165,12 +184,21 @@ Pricing references:
 - <https://aws.amazon.com/route53/pricing/>
 - <https://aws.amazon.com/s3/pricing/>
 - <https://aws.amazon.com/eventbridge/pricing/>
+- <https://aws.amazon.com/lambda/pricing/>
+- <https://aws.amazon.com/cloudwatch/pricing/>
+- <https://aws.amazon.com/athena/pricing/>
 
 ## Operational tradeoffs
 
-- CloudFront and S3 request access logs are intentionally disabled to minimize
-  retained visitor data and cost. CloudFront standard metrics and CodeBuild
-  publication logs remain enabled.
+- CloudFront standard logging v2 stores only aggregate operational fields for
+  90 days. It deliberately excludes IP addresses, cookies, query strings, user
+  agents, and full referrers; no browser tracker, identifier, or client storage
+  is used.
+- The scheduled homepage checker validates HTTP status and the expected title
+  every 15 minutes using a short arm64 Lambda invocation. This is appropriate
+  for a static Astro site and avoids Synthetics browser-run, artifact, and custom
+  metric charges, but it does not validate client-side rendering or capture
+  screenshots.
 - AWS WAF is not provisioned because the origin is private and the site has no
   dynamic request-processing backend.
 - CodeBuild uses AWS-managed encryption instead of a customer-managed KMS key,
