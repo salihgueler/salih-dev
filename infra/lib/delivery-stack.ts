@@ -162,7 +162,7 @@ export class SalihDevDeliveryStack extends Stack {
       priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
     });
 
-    new Analytics(this, { distribution });
+    const analytics = new Analytics(this, { distribution });
 
     for (const recordName of [props.domainName, `www.${props.domainName}`]) {
       new route53.ARecord(this, `Ipv4Alias${recordName}`, {
@@ -327,6 +327,7 @@ export class SalihDevDeliveryStack extends Stack {
     // --- Operational monitoring: CloudFront errors and scheduled homepage check ---
     new Monitoring(this, {
       alarmTopic,
+      analyticsWidgetFunction: analytics.widgetFunction,
       distribution,
       distributionId: distribution.distributionId,
       domainName: props.domainName,

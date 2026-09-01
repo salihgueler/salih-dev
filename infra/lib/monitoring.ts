@@ -1,14 +1,17 @@
 import { CfnOutput, Duration } from "aws-cdk-lib";
 import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as cloudwatch from "aws-cdk-lib/aws-cloudwatch";
+import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as sns from "aws-cdk-lib/aws-sns";
 import type { Construct } from "constructs";
 
+import { ANALYTICS_QUERY_DEFINITIONS } from "./analytics-query-definitions";
 import { createCloudFrontMonitoring } from "./cloudfront-monitoring";
 import { createHomepageMonitoring } from "./homepage-monitoring";
 
 export interface MonitoringProps {
   readonly alarmTopic: sns.ITopic;
+  readonly analyticsWidgetFunction: lambda.IFunction;
   readonly distribution: cloudfront.Distribution;
   readonly distributionId: string;
   readonly domainName: string;
@@ -60,6 +63,21 @@ export class Monitoring {
         title: "Operational alarm states",
         width: 24,
       }),
+    );
+    dashboard.addWidgets(
+      ...ANALYTICS_QUERY_DEFINITIONS.map(
+        (definition) =>
+          new cloudwatch.CustomWidget({
+            functionArn: props.analyticsWidgetFunction.functionArn,
+            height: definition.widgetHeight,
+            params: { view: definition.view },
+            title: definition.title,
+            updateOnRefresh: true,
+            updateOnResize: false,
+            updateOnTimeRangeChange: false,
+            width: definition.widgetWidth,
+          }),
+      ),
     );
 
     new CfnOutput(scope, "OperationsDashboardName", {
