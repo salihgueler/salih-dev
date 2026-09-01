@@ -115,3 +115,37 @@ test("includes agent-friendly edge behavior", () => {
     }),
   });
 });
+
+test("adds privacy-first analytics and low-cost monitoring", () => {
+  const { delivery } = createStacks();
+
+  // Analytics: one privacy-filtered CloudFront log delivery + catalog + queries.
+  delivery.resourceCountIs("AWS::Logs::Delivery", 1);
+  delivery.resourceCountIs("AWS::Glue::Database", 1);
+  delivery.resourceCountIs("AWS::Glue::Table", 1);
+  delivery.resourceCountIs("AWS::Athena::WorkGroup", 1);
+  delivery.resourceCountIs("AWS::Athena::NamedQuery", 3);
+
+  // Monitoring: scheduled homepage checker, operations dashboard, no canary.
+  delivery.resourceCountIs("AWS::Lambda::Function", 1);
+  delivery.resourceCountIs("AWS::Events::Rule", 1);
+  delivery.resourceCountIs("AWS::CloudWatch::Dashboard", 1);
+  delivery.resourceCountIs("AWS::Synthetics::Canary", 0);
+
+  // Build failure alarm plus CloudFront 4xx/5xx and two homepage-check alarms.
+  delivery.resourceCountIs("AWS::CloudWatch::Alarm", 5);
+
+  // Selected log fields must exclude visitor identifiers.
+  const deliveries = delivery.findResources("AWS::Logs::Delivery");
+  const fields = Object.values(deliveries)[0].Properties.RecordFields as string[];
+  for (const forbidden of [
+    "c-ip",
+    "cs(Cookie)",
+    "cs-uri-query",
+    "cs(User-Agent)",
+    "cs(Referer)",
+    "x-forwarded-for",
+  ]) {
+    assert.ok(!fields.includes(forbidden), `must not log ${forbidden}`);
+  }
+});

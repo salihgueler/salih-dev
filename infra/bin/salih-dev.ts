@@ -8,7 +8,10 @@ import { SalihDevStateStack } from "../lib/state-stack";
 
 const app = new App();
 const domainName = app.node.tryGetContext("domainName") as string;
-const region = process.env.CDK_DEFAULT_REGION ?? "us-east-1";
+const region =
+  (app.node.tryGetContext("selectedRegion") as string | undefined) ??
+  process.env.CDK_DEFAULT_REGION ??
+  "us-east-1";
 
 if (region !== "us-east-1") {
   throw new Error(
