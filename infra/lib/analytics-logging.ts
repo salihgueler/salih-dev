@@ -36,7 +36,7 @@ export function createAnalyticsLogging(
     resource: `delivery-source:${DELIVERY_SOURCE_NAME}`,
     service: "logs",
   });
-  const logObjectPath = `AWSLogs/aws-account-id=${stack.account}/CloudFront/*`;
+  const logObjectPath = `AWSLogs/${stack.account}/CloudFront/*`;
 
   bucket.addToResourcePolicy(
     new iam.PolicyStatement({
@@ -85,8 +85,6 @@ export function createAnalyticsLogging(
     deliveryDestinationArn: destination.attrArn,
     deliverySourceName: DELIVERY_SOURCE_NAME,
     recordFields: ANALYTICS_RECORD_FIELDS,
-    s3EnableHiveCompatiblePath: true,
-    s3SuffixPath: "year={yyyy}/month={MM}/day={dd}/hour={HH}",
   });
   delivery.addResourceDependency(source);
   delivery.addResourceDependency(destination);

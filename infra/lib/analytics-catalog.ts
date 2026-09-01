@@ -33,26 +33,8 @@ export function createAnalyticsCatalog(
         "Selected CloudFront fields; excludes IP, cookies, query strings, user agent, and full referrer",
       name: ANALYTICS_TABLE_NAME,
       parameters: {
-        "projection.day.digits": "2",
-        "projection.day.range": "1,31",
-        "projection.day.type": "integer",
-        "projection.enabled": "true",
-        "projection.hour.digits": "2",
-        "projection.hour.range": "0,23",
-        "projection.hour.type": "integer",
-        "projection.month.digits": "2",
-        "projection.month.range": "1,12",
-        "projection.month.type": "integer",
-        "projection.year.range": "2026,2100",
-        "projection.year.type": "integer",
-        "storage.location.template": `${bucket.s3UrlForObject(`AWSLogs/aws-account-id=${stack.account}/CloudFront`)}/year=\${year}/month=\${month}/day=\${day}/hour=\${hour}/`,
+        classification: "json",
       },
-      partitionKeys: [
-        { name: "year", type: "string" },
-        { name: "month", type: "string" },
-        { name: "day", type: "string" },
-        { name: "hour", type: "string" },
-      ],
       storageDescriptor: {
         columns: [
           { name: "event_date", type: "string" },
@@ -76,7 +58,7 @@ export function createAnalyticsCatalog(
         ],
         inputFormat: "org.apache.hadoop.mapred.TextInputFormat",
         location: bucket.s3UrlForObject(
-          `AWSLogs/aws-account-id=${stack.account}/CloudFront/`,
+          `AWSLogs/${stack.account}/CloudFront/`,
         ),
         outputFormat:
           "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
