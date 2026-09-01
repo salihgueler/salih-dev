@@ -24,6 +24,9 @@ The architecture uses:
   plus an operations dashboard.
 - EventBridge and an arm64 Lambda function for a 15-minute homepage HTTP status
   and title check without a browser runtime.
+- A read-only arm64 Lambda powering three CloudWatch custom widgets for top
+  content, daily traffic/errors, and edge p95. The widgets reuse eligible Athena
+  results for one hour and have no public endpoint.
 - CloudFront standard logging v2 to a dedicated encrypted S3 bucket with a
   90-day lifecycle, a Glue table, an Athena workgroup, and saved queries. The
   selected fields omit IP addresses, cookies, query strings, user agents, and
@@ -160,7 +163,7 @@ compute. Prices are estimates for `us-east-1` as of August 2026 and exclude tax.
 | ACM public certificate | $0.00 | $0.00 |
 | CloudWatch logs, dashboard, alarms, and SNS | about $0.01 | about $3.50 |
 | Scheduled arm64 Lambda homepage check | $0.00 | less than $0.01 |
-| CloudFront standard logs v2 and occasional Athena queries | less than $0.05 | less than $0.05 |
+| CloudFront standard logs v2, analytics widget Lambda, and reused Athena queries | less than $0.05 | less than $0.05 |
 | **Estimated total** | **about $0.65/month** | **about $5.20/month** |
 
 The likely estimate assumes this dashboard remains within CloudWatch's first
@@ -199,6 +202,10 @@ Pricing references:
   for a static Astro site and avoids Synthetics browser-run, artifact, and custom
   metric charges, but it does not validate client-side rendering or capture
   screenshots.
+- The analytics custom widgets run only when the AWS console dashboard loads or
+  refreshes. They have no public endpoint, query only the privacy-filtered table,
+  and request Athena result reuse for one hour; dashboard viewers need explicit
+  `lambda:InvokeFunction` permission for the widget function.
 - AWS WAF is not provisioned because the origin is private and the site has no
   dynamic request-processing backend.
 - CodeBuild uses AWS-managed encryption instead of a customer-managed KMS key,

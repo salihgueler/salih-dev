@@ -63,9 +63,11 @@ fields to standard logging:
 - browser or device identifiers
 
 Keep analytics storage private, TLS-only, SSE-S3 encrypted, and limited to the
-90-day lifecycle unless the user explicitly approves a policy change. Prefer
-service-default metrics and the scheduled Lambda homepage checker over paid
-CloudFront additional metrics or browser canaries.
+90-day lifecycle unless the user explicitly approves a policy change. Keep the
+Athena dashboard widget read-only, without a public endpoint, and retain its
+one-hour result reuse plus one-week Lambda log retention. Prefer service-default
+metrics and the scheduled Lambda homepage checker over paid CloudFront additional
+metrics or browser canaries.
 
 ## AWS deployment safety
 

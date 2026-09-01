@@ -81,9 +81,11 @@ The CDK application in `infra/` defines two stacks:
 
 Analytics use privacy-filtered CloudFront standard logs v2 in a retained
 90-day S3 bucket, an external Glue table over the default CloudFront prefix, an
-Athena workgroup, and three saved
-queries. The selected fields exclude IP addresses, cookies, query strings, user
-agents, full referrers, and browser identifiers.
+Athena workgroup, and three saved queries. Three CloudWatch custom widgets render
+top content, daily traffic/errors, and edge p95 as in-console Markdown tables.
+The read-only widget Lambda reuses eligible Athena results for one hour to keep
+query and invocation costs negligible. The selected fields exclude IP addresses,
+cookies, query strings, user agents, full referrers, and browser identifiers.
 
 Operational monitoring uses default CloudFront 4xx/5xx metrics and a lightweight
 15-minute EventBridge/Lambda homepage status-and-title check. It deliberately

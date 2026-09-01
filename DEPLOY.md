@@ -153,14 +153,20 @@ aws athena start-query-execution \
 ```
 
 Open the `salih-dev-operations` CloudWatch dashboard for request volume, 4xx and
-5xx rates, homepage check invocations and errors, and p95 request duration. An
-EventBridge rule invokes the lightweight Lambda check every 15 minutes; it
+5xx rates, homepage check invocations and errors, p95 request duration, top
+content, daily traffic/errors, and edge p95 performance. The three analytics
+widgets invoke a read-only Lambda inside the AWS console and reuse eligible
+Athena results for up to one hour. The dashboard viewer needs
+`lambda:InvokeFunction` permission for the `AnalyticsWidgetFunctionName` output;
+no public endpoint or site authentication is created.
+
+An EventBridge rule invokes the lightweight homepage check every 15 minutes and
 verifies the homepage HTTP status and title without a browser runtime. CloudFront
 and homepage-check alarms publish to `BuildAlarmTopicArn`; subscribe and confirm
 an email endpoint if notifications are wanted.
 
-Use the `HomepageCheckFunctionName` and `HomepageCheckScheduleName` stack outputs
-when inspecting the checker:
+Use the `AnalyticsWidgetFunctionName`, `HomepageCheckFunctionName`, and
+`HomepageCheckScheduleName` stack outputs when inspecting the functions:
 
 ```sh
 aws cloudwatch get-dashboard \
