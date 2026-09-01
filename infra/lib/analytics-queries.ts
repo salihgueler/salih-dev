@@ -5,21 +5,19 @@ import type { Construct } from "constructs";
 
 import {
   ANALYTICS_DATABASE_NAME,
-  ANALYTICS_TABLE_NAME,
   ANALYTICS_WORKGROUP_NAME,
 } from "./analytics-constants";
 import type { AnalyticsCatalog } from "./analytics-catalog";
-
-interface NamedQueryProps {
-  readonly name: string;
-  readonly query: string;
-}
+import {
+  ANALYTICS_QUERY_DEFINITIONS,
+  type AnalyticsQueryDefinition,
+} from "./analytics-query-definitions";
 
 export function createAnalyticsQueries(
   scope: Construct,
   bucket: s3.IBucket,
   catalog: AnalyticsCatalog,
-): void {
+): athena.CfnWorkGroup {
   const workGroup = new athena.CfnWorkGroup(scope, "AnalyticsWorkGroup", {
     name: ANALYTICS_WORKGROUP_NAME,
     recursiveDeleteOption: true,
@@ -34,47 +32,25 @@ export function createAnalyticsQueries(
     },
   });
 
-  addNamedQuery(scope, "TopContentQuery", workGroup, catalog, {
-    name: "salih-dev-top-content",
-    query:
-      `SELECT uri_stem, count(*) AS requests ` +
-      `FROM ${ANALYTICS_DATABASE_NAME}.${ANALYTICS_TABLE_NAME} ` +
-      `WHERE method = 'GET' AND try_cast(status AS integer) BETWEEN 200 AND 399 ` +
-      `AND uri_stem NOT LIKE '/_astro/%' ` +
-      `GROUP BY uri_stem ORDER BY requests DESC LIMIT 50`,
-  });
-  addNamedQuery(scope, "DailyTrafficQuery", workGroup, catalog, {
-    name: "salih-dev-daily-traffic",
-    query:
-      `SELECT event_date, count(*) AS requests, ` +
-      `sum(CASE WHEN try_cast(status AS integer) >= 400 THEN 1 ELSE 0 END) AS errors ` +
-      `FROM ${ANALYTICS_DATABASE_NAME}.${ANALYTICS_TABLE_NAME} ` +
-      `GROUP BY event_date ORDER BY event_date DESC LIMIT 90`,
-  });
-  addNamedQuery(scope, "PerformanceQuery", workGroup, catalog, {
-    name: "salih-dev-edge-performance",
-    query:
-      `SELECT uri_stem, approx_percentile(try_cast(time_taken AS double), 0.95) AS p95_seconds, ` +
-      `approx_percentile(try_cast(time_to_first_byte AS double), 0.95) AS p95_ttfb_seconds ` +
-      `FROM ${ANALYTICS_DATABASE_NAME}.${ANALYTICS_TABLE_NAME} WHERE method = 'GET' ` +
-      `GROUP BY uri_stem ORDER BY p95_seconds DESC LIMIT 50`,
-  });
+  for (const definition of ANALYTICS_QUERY_DEFINITIONS) {
+    addNamedQuery(scope, workGroup, catalog, definition);
+  }
+  return workGroup;
 }
 
 function addNamedQuery(
   scope: Construct,
-  id: string,
   workGroup: athena.CfnWorkGroup,
   catalog: {
     readonly database: glue.CfnDatabase;
     readonly table: glue.CfnTable;
   },
-  props: NamedQueryProps,
+  definition: AnalyticsQueryDefinition,
 ): void {
-  const query = new athena.CfnNamedQuery(scope, id, {
+  const query = new athena.CfnNamedQuery(scope, definition.id, {
     database: ANALYTICS_DATABASE_NAME,
-    name: props.name,
-    queryString: props.query,
+    name: definition.name,
+    queryString: definition.query,
     workGroup: ANALYTICS_WORKGROUP_NAME,
   });
   query.addResourceDependency(workGroup);
