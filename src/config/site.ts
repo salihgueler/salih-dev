@@ -80,6 +80,13 @@ export const site = {
   conferences: {
     upcoming: [
       {
+        name: "Flutter and Friends",
+        location: "Stockholm, Sweden",
+        date: "September 3–5, 2026",
+        href: "https://flutterfriends.dev/",
+        role: "Workshop",
+      },
+      {
         name: "Agentcon London",
         location: "London, United Kingdom",
         date: "September 8, 2026",
