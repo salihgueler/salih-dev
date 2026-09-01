@@ -80,7 +80,8 @@ The CDK application in `infra/` defines two stacks:
   CodeBuild publication, daily DEV synchronization, alarms, and analytics.
 
 Analytics use privacy-filtered CloudFront standard logs v2 in a retained
-90-day S3 bucket, a projected Glue table, an Athena workgroup, and three saved
+90-day S3 bucket, an external Glue table over the default CloudFront prefix, an
+Athena workgroup, and three saved
 queries. The selected fields exclude IP addresses, cookies, query strings, user
 agents, full referrers, and browser identifiers.
 
