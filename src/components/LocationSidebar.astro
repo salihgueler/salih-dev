@@ -27,9 +27,8 @@ import { site } from "../config/site";
       </span>
     </div>
     <p>
-      {site.name} is currently based in {site.location.city},{" "}
+      {site.shortName} is currently in {site.location.city},{" "}
       {site.location.country}.
-      {site.location.updated && ` Last updated ${site.location.updated}.`}
     </p>
     <a
       class="attribution"
