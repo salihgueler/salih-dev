@@ -30,7 +30,7 @@ export const site = {
     short:
       "Salih is a Senior Developer Advocate at AWS with a strong focus on frontend and mobile app development, developer experience, and serverless architecture.",
     long: [
-      "I am a Senior Developer Advocate at AWS based in Berlin, Germany. My work focuses on frontend and mobile app development, developer experience, and serverless architecture.",
+      "I am a Senior Developer Advocate at AWS based in Stockholm, Sweden. My work focuses on frontend and mobile app development, developer experience, and serverless architecture.",
       "I help developers turn complex technical ideas into approachable, practical solutions. I also speak at developer conferences and community events, sharing lessons from the intersection of client applications, cloud systems, and developer tooling.",
     ],
   },
@@ -41,12 +41,12 @@ export const site = {
     "Serverless architecture",
   ],
   location: {
-    city: "Berlin",
-    country: "Germany",
-    updated: null,
+    city: "Stockholm",
+    country: "Sweden",
+    updated: "September 2, 2026",
     coordinates: {
-      x: 53,
-      y: 32,
+      x: 54,
+      y: 28,
     },
     map: {
       src: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Blank_Gomberg_World_map.png/1280px-Blank_Gomberg_World_map.png",
