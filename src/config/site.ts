@@ -30,7 +30,7 @@ export const site = {
     short:
       "Salih is a Senior Developer Advocate at AWS with a strong focus on frontend and mobile app development, developer experience, and serverless architecture.",
     long: [
-      "I am a Senior Developer Advocate at AWS based in Stockholm, Sweden. My work focuses on frontend and mobile app development, developer experience, and serverless architecture.",
+      "I am a Senior Developer Advocate at AWS based in Berlin, Germany. My work focuses on frontend and mobile app development, developer experience, and serverless architecture.",
       "I help developers turn complex technical ideas into approachable, practical solutions. I also speak at developer conferences and community events, sharing lessons from the intersection of client applications, cloud systems, and developer tooling.",
     ],
   },
@@ -41,12 +41,12 @@ export const site = {
     "Serverless architecture",
   ],
   location: {
-    city: "Stockholm",
-    country: "Sweden",
-    updated: "September 2, 2026",
+    city: "London",
+    country: "UK",
+    updated: "September 7, 2026",
     coordinates: {
-      x: 54,
-      y: 28,
+      x: 50,
+      y: 32,
     },
     map: {
       src: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Blank_Gomberg_World_map.png/1280px-Blank_Gomberg_World_map.png",
@@ -80,13 +80,6 @@ export const site = {
   conferences: {
     upcoming: [
       {
-        name: "Flutter and Friends",
-        location: "Stockholm, Sweden",
-        date: "September 3–5, 2026",
-        href: "https://flutterfriends.dev/",
-        role: "Workshop",
-      },
-      {
         name: "Agentcon London",
         location: "London, United Kingdom",
         date: "September 8, 2026",
@@ -95,6 +88,13 @@ export const site = {
       },
     ],
     recent: [
+      {
+        name: "Flutter and Friends",
+        location: "Stockholm, Sweden",
+        date: "September 3–5, 2026",
+        href: "https://flutterfriends.dev/",
+        role: "Workshop",
+      },
       {
         name: "WeAreDevelopers",
         location: "Berlin, Germany",
