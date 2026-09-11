@@ -5,6 +5,7 @@
     "@aws-cdk/aws-s3:createDefaultLoggingPolicy": true,
     "@aws-cdk/core:defaultCrossStackReferences": "strong",
     "domainName": "salih.dev",
+    "selectedAccount": "018525129316",
     "selectedRegion": "us-east-1"
   }
 }

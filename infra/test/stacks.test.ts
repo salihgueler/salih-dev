@@ -126,8 +126,9 @@ test("adds privacy-first analytics and low-cost monitoring", () => {
   delivery.resourceCountIs("AWS::Athena::WorkGroup", 1);
   delivery.resourceCountIs("AWS::Athena::NamedQuery", 3);
 
-  // Monitoring: scheduled homepage checker, operations dashboard, no canary.
-  delivery.resourceCountIs("AWS::Lambda::Function", 2);
+  // Monitoring: analytics widget, homepage checker, two content API functions,
+  // operations dashboard, and no browser canary.
+  delivery.resourceCountIs("AWS::Lambda::Function", 4);
   delivery.resourceCountIs("AWS::Events::Rule", 1);
   delivery.resourceCountIs("AWS::CloudWatch::Dashboard", 1);
   delivery.resourceCountIs("AWS::Synthetics::Canary", 0);

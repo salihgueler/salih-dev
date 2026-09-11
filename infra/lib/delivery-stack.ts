@@ -27,6 +27,7 @@ import { NagSuppressions } from "cdk-nag";
 import type { Construct } from "constructs";
 
 import { Analytics } from "./analytics";
+import { ContentApi } from "./content-api";
 import {
   viewerRequestCode,
   viewerResponseCode,
@@ -46,6 +47,16 @@ export class SalihDevDeliveryStack extends Stack {
     props: SalihDevDeliveryStackProps,
   ) {
     super(scope, id, props);
+
+    const contentEditor = new iam.User(this, "ContentEditor", {
+      userName: "salih-dev-editor",
+    });
+    contentEditor.applyRemovalPolicy(RemovalPolicy.RETAIN);
+    new CfnOutput(this, "ContentEditorUserArn", {
+      description:
+        "Dedicated non-root identity for SigV4-authenticated site content updates.",
+      value: contentEditor.userArn,
+    });
 
     const siteBucket = new s3.Bucket(this, "SiteBucket", {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
@@ -186,9 +197,11 @@ export class SalihDevDeliveryStack extends Stack {
         ".astro/**",
         ".cache/**",
         ".git/**",
+        ".kiro/settings",
+        ".kiro/settings/**",
         "dist/**",
-        "infra/cdk.out/**",
-        "infra/node_modules/**",
+        "infra",
+        "infra/**",
         "node_modules/**",
       ],
       path: path.resolve(__dirname, "../.."),
@@ -212,6 +225,7 @@ export class SalihDevDeliveryStack extends Stack {
           pre_build: {
             commands: [
               "mkdir -p .cache public/images/blog",
+              'aws s3 cp "s3://$CONTENT_BUCKET/site/content.v1.json" "$SITE_CONTENT_PATH" --only-show-errors',
               'aws s3 sync "s3://$CONTENT_BUCKET/posts/" src/content/blog/ --only-show-errors',
               'aws s3 sync "s3://$CONTENT_BUCKET/images/" public/images/blog/ --only-show-errors',
               'aws s3 cp "s3://$CONTENT_BUCKET/state/dev-sync-manifest.json" .cache/dev-sync-manifest.json --only-show-errors || echo "No existing DEV manifest; running initial sync."',
@@ -259,6 +273,9 @@ export class SalihDevDeliveryStack extends Stack {
         SITE_BUCKET: {
           value: siteBucket.bucketName,
         },
+        SITE_CONTENT_PATH: {
+          value: ".cache/site-content.json",
+        },
         SITE_URL: {
           value: `https://${props.domainName}`,
         },
@@ -286,6 +303,12 @@ export class SalihDevDeliveryStack extends Stack {
         ],
       }),
     );
+
+    new ContentApi(this, "ContentApi", {
+      contentBucket: props.contentBucket,
+      editor: contentEditor,
+      publisher: project,
+    });
 
     const schedulerDlq = new sqs.Queue(this, "SchedulerDlq", {
       enforceSSL: true,

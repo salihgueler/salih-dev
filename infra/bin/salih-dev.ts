@@ -8,11 +8,17 @@ import { SalihDevStateStack } from "../lib/state-stack";
 
 const app = new App();
 const domainName = app.node.tryGetContext("domainName") as string;
+const account =
+  (app.node.tryGetContext("selectedAccount") as string | undefined) ??
+  process.env.CDK_DEFAULT_ACCOUNT;
 const region =
   (app.node.tryGetContext("selectedRegion") as string | undefined) ??
   process.env.CDK_DEFAULT_REGION ??
   "us-east-1";
 
+if (!account) {
+  throw new Error("Set selectedAccount in cdk.json before synthesizing salih.dev.");
+}
 if (region !== "us-east-1") {
   throw new Error(
     "Deploy salih.dev in us-east-1 because CloudFront requires its ACM certificate there.",
@@ -20,7 +26,7 @@ if (region !== "us-east-1") {
 }
 
 const env = {
-  account: process.env.CDK_DEFAULT_ACCOUNT,
+  account,
   region,
 };
 
