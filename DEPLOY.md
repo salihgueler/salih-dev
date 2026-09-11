@@ -193,3 +193,82 @@ Inspect the scheduler DLQ and CodeBuild logs when a publication alarm fires.
 Rollback site content by restoring a previous S3 object version or publishing
 a previously verified source revision. Route 53 and retained buckets remain
 protected; deleting a CDK stack does not delete retained content.
+
+## 9. Manage location and events through the content API
+
+The content API accepts only SigV4 requests from the retained
+`salih-dev-editor` IAM user. CDK intentionally creates no password or access key.
+After the first API deployment, sign in as root one final time to enable console
+access for that user and register MFA. Do not create an access key. Then use AWS
+CLI login to obtain automatically refreshed temporary credentials:
+
+```sh
+aws login --profile salih-dev-editor
+aws sts get-caller-identity --profile salih-dev-editor
+```
+
+The caller ARN must be
+`arn:aws:iam::018525129316:user/salih-dev-editor`. Export the temporary session
+into the current shell for curl signing:
+
+```sh
+eval "$(aws configure export-credentials \
+  --profile salih-dev-editor \
+  --format env)"
+```
+
+Read `ContentApiUrl` from the `SalihDevDelivery` outputs and set it without a
+trailing slash:
+
+```sh
+export SITE_CONTENT_API="<ContentApiUrl>"
+```
+
+Initialize the retained content object once. The conditional header prevents
+accidentally replacing an object that already exists:
+
+```sh
+curl --fail-with-body \
+  --aws-sigv4 "aws:amz:us-east-1:execute-api" \
+  --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY" \
+  --header "x-amz-security-token: $AWS_SESSION_TOKEN" \
+  --header "Content-Type: application/json" \
+  --header "If-None-Match: *" \
+  --data-binary @src/config/site-content.default.json \
+  "$SITE_CONTENT_API/v1/content"
+```
+
+For later edits, download both the content and its ETag:
+
+```sh
+mkdir -p .cache
+curl --fail-with-body \
+  --aws-sigv4 "aws:amz:us-east-1:execute-api" \
+  --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY" \
+  --header "x-amz-security-token: $AWS_SESSION_TOKEN" \
+  --dump-header .cache/site-content.headers \
+  --output .cache/site-content.json \
+  "$SITE_CONTENT_API/v1/content"
+
+ETAG="$(awk 'tolower($1) == "etag:" { print $2 }' \
+  .cache/site-content.headers | tr -d '\r')"
+```
+
+Edit `.cache/site-content.json`, then conditionally publish it. A stale ETag
+returns HTTP 412 instead of overwriting a newer update:
+
+```sh
+curl --fail-with-body \
+  --aws-sigv4 "aws:amz:us-east-1:execute-api" \
+  --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY" \
+  --header "x-amz-security-token: $AWS_SESSION_TOKEN" \
+  --header "Content-Type: application/json" \
+  --header "If-Match: $ETAG" \
+  --data-binary @.cache/site-content.json \
+  "$SITE_CONTENT_API/v1/content"
+```
+
+A successful PUT returns HTTP 202 with the new S3 version and CodeBuild build
+ID. Invalid content returns HTTP 400 before storage; unsigned callers, other IAM
+identities, and mismatched caller ARNs receive HTTP 403. Restore an earlier S3
+version of `site/content.v1.json` and publish again to roll back.

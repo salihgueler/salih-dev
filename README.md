@@ -30,6 +30,7 @@ process with `npm run astro -- dev status`, `npm run astro -- dev logs`, and
 | `npm run check` | Run Astro and TypeScript diagnostics |
 | `npm run build` | Build the static site into `dist/` |
 | `npm run verify:build` | Verify discovery files, post representations, and self-hosted DEV banners |
+| `./redeploy` | Validate, review, deploy, publish, and verify the production site |
 | `npm run preview` | Preview the production build locally |
 | `npm run import:dev` | Synchronize reviewed DEV posts and banners |
 | `npm run import:medium` | Import reviewed Medium posts |
@@ -46,8 +47,15 @@ npm run synth
 
 Blog posts live in `src/content/blog/` and are validated by
 `src/content.config.ts`. Set `draft: true` to exclude a post from the website,
-RSS feed, and machine-readable indexes. Site identity, biography, social links,
-location, and conference details live in `src/config/site.ts`.
+RSS feed, and machine-readable indexes. Permanent identity, biography, social
+links, and map presentation live in `src/config/site.ts`.
+
+Current location and conference events use the versioned schema in
+`src/config/site-content-schema.ts`. Local builds use
+`src/config/site-content.default.json`; production builds load
+`site/content.v1.json` from the retained content bucket. The IAM-authenticated
+content API updates that object and starts the existing publisher, so content
+changes do not require a CDK deployment.
 
 The DEV importer uses reviewed category and summary metadata, writes normalized
 Markdown, and downloads deterministic banner files under
@@ -77,7 +85,8 @@ The CDK application in `infra/` defines two stacks:
 
 - `SalihDevState`: retained, versioned content storage and the Route 53 zone.
 - `SalihDevDelivery`: private website storage, CloudFront, ACM, Route 53 aliases,
-  CodeBuild publication, daily DEV synchronization, alarms, and analytics.
+  CodeBuild publication, an IAM-authenticated content API, daily DEV
+  synchronization, alarms, and analytics.
 
 Analytics use privacy-filtered CloudFront standard logs v2 in a retained
 90-day S3 bucket, an external Glue table over the default CloudFront prefix, an

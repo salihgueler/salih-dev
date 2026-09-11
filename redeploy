@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INFRA_DIR="${ROOT_DIR}/infra"
+PROFILE="personal"
+REGION="us-east-1"
+EXPECTED_ACCOUNT="018525129316"
+STACK="SalihDevDelivery"
+STATE_STACK="SalihDevState"
+CONTENT_KEY="site/content.v1.json"
+SITE_URL="https://salih.dev/"
+
+trap 'echo "Redeploy failed at line ${LINENO}." >&2' ERR
+
+require_command() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "Required command not found: $1" >&2
+    exit 1
+  fi
+}
+
+require_command aws
+require_command npm
+require_command npx
+require_command curl
+
+if ! aws sts get-caller-identity \
+  --profile "${PROFILE}" \
+  --region "${REGION}" \
+  >/dev/null 2>&1; then
+  echo "AWS credentials are unavailable; starting login for profile ${PROFILE}."
+  aws login --profile "${PROFILE}"
+fi
+
+ACCOUNT="$(aws sts get-caller-identity --profile "${PROFILE}" --region "${REGION}" \
+  --query Account --output text)"
+CALLER_ARN="$(aws sts get-caller-identity --profile "${PROFILE}" --region "${REGION}" \
+  --query Arn --output text)"
+if [[ "${ACCOUNT}" != "${EXPECTED_ACCOUNT}" ]]; then
+  echo "Refusing deployment: expected account ${EXPECTED_ACCOUNT}, got ${ACCOUNT}." >&2
+  exit 1
+fi
+
+export AWS_PROFILE="${PROFILE}"
+export AWS_REGION="${REGION}"
+export CDK_DEFAULT_ACCOUNT="${ACCOUNT}"
+export CDK_DEFAULT_REGION="${REGION}"
+
+echo "AWS account: ${ACCOUNT}"
+echo "Caller:      ${CALLER_ARN}"
+echo "Stack:       ${STACK}"
+echo
+
+cd "${ROOT_DIR}"
+if [[ ! -d node_modules ]]; then
+  npm ci
+fi
+npm test
+npm run check
+npm run build
+npm run verify:build
+
+cd "${INFRA_DIR}"
+if [[ ! -d node_modules ]]; then
+  npm ci
+fi
+npm run build
+npm test
+npm run synth
+
+ASSET_LIMIT_KIB=$((1024 * 1024))
+for asset in "${INFRA_DIR}"/cdk.out/asset.*; do
+  [[ -e "${asset}" ]] || continue
+  ASSET_SIZE_KIB="$(du -sk "${asset}" | awk '{print $1}')"
+  if ((ASSET_SIZE_KIB >= ASSET_LIMIT_KIB)); then
+    echo "CDK asset exceeds the 1 GiB packaging limit: ${asset}" >&2
+    exit 1
+  fi
+done
+echo "CDK assets are below the 1 GiB packaging limit."
+
+npx cdk diff "${STACK}" --strict --no-change-set
+
+echo
+read -r -p "Type deploy to update ${STACK} in account ${ACCOUNT}: " confirmation
+if [[ "${confirmation}" != "deploy" ]]; then
+  echo "Deployment cancelled."
+  exit 0
+fi
+
+npx cdk deploy "${STACK}" --strict
+
+PUBLISHER_PROJECT="$(aws cloudformation describe-stacks --stack-name "${STACK}" \
+  --region "${REGION}" --query "Stacks[0].Outputs[?OutputKey=='PublisherProjectName'].OutputValue | [0]" --output text)"
+
+if [[ -z "${PUBLISHER_PROJECT}" || "${PUBLISHER_PROJECT}" == "None" ]]; then
+  echo "Could not find PublisherProjectName in ${STACK} outputs." >&2
+  exit 1
+fi
+
+CONTENT_BUCKET="$(aws cloudformation describe-stacks --stack-name "${STATE_STACK}" \
+  --region "${REGION}" --query "Stacks[0].Outputs[?OutputKey=='ContentBucketName'].OutputValue | [0]" --output text)"
+CONTENT_API_URL="$(aws cloudformation describe-stacks --stack-name "${STACK}" \
+  --region "${REGION}" --query "Stacks[0].Outputs[?OutputKey=='ContentApiUrl'].OutputValue | [0]" --output text)"
+
+if ! aws s3api head-object --bucket "${CONTENT_BUCKET}" --key "${CONTENT_KEY}" \
+  --region "${REGION}" >/dev/null 2>&1; then
+  echo "Deployment complete, but publication is waiting for initial site content."
+  echo "Content API: ${CONTENT_API_URL}"
+  echo "Initialize it with the signed PUT workflow in DEPLOY.md."
+  exit 0
+fi
+
+BUILD_ID="$(aws codebuild start-build \
+  --project-name "${PUBLISHER_PROJECT}" \
+  --region "${REGION}" \
+  --query build.id \
+  --output text)"
+
+echo "Publisher: ${PUBLISHER_PROJECT}"
+echo "Build:     ${BUILD_ID}"
+
+for ((attempt = 1; attempt <= 120; attempt++)); do
+  BUILD_STATUS="$(aws codebuild batch-get-builds \
+    --ids "${BUILD_ID}" \
+    --region "${REGION}" \
+    --query 'builds[0].buildStatus' \
+    --output text)"
+
+  echo "CodeBuild status: ${BUILD_STATUS}"
+  case "${BUILD_STATUS}" in
+    SUCCEEDED)
+      curl --fail --silent --show-error --head "${SITE_URL}" >/dev/null
+      echo "Redeploy complete: ${SITE_URL}"
+      exit 0
+      ;;
+    FAILED|FAULT|STOPPED|TIMED_OUT)
+      echo "Publication failed with status ${BUILD_STATUS}." >&2
+      exit 1
+      ;;
+  esac
+
+  sleep 15
+done
+
+echo "Timed out waiting for CodeBuild after 30 minutes." >&2
+exit 1
