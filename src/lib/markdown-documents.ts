@@ -70,7 +70,7 @@ function homeDocument(posts: CollectionEntry<"blog">[]): string {
     "",
     site.description,
     "",
-    `Currently based in ${site.location.city}, ${site.location.country}.`,
+    `Currently in ${site.location.city}, ${site.location.country}.`,
     "",
     "## Latest posts",
     "",

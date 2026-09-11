@@ -1,3 +1,9 @@
+import {
+  conferences,
+  formatIsoDate,
+  siteContent,
+} from "./site-content";
+
 export type SocialKey = "linkedin" | "x" | "github" | "bluesky";
 
 export type SocialLink = {
@@ -41,13 +47,10 @@ export const site = {
     "Serverless architecture",
   ],
   location: {
-    city: "London",
-    country: "UK",
-    updated: "September 7, 2026",
-    coordinates: {
-      x: 50,
-      y: 32,
-    },
+    city: siteContent.location.city,
+    country: siteContent.location.country,
+    updated: formatIsoDate(siteContent.location.updatedOn),
+    coordinates: siteContent.location.coordinates,
     map: {
       src: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Blank_Gomberg_World_map.png/1280px-Blank_Gomberg_World_map.png",
       attribution: "Map: Wikimedia Commons",
@@ -77,33 +80,10 @@ export const site = {
       icon: "bluesky",
     },
   ] satisfies SocialLink[],
-  conferences: {
-    upcoming: [
-      {
-        name: "Agentcon London",
-        location: "London, United Kingdom",
-        date: "September 8, 2026",
-        href: "https://globalai.community/e/x79ncrl7",
-        role: "Speaker",
-      },
-    ],
-    recent: [
-      {
-        name: "Flutter and Friends",
-        location: "Stockholm, Sweden",
-        date: "September 3–5, 2026",
-        href: "https://flutterfriends.dev/",
-        role: "Workshop",
-      },
-      {
-        name: "WeAreDevelopers",
-        location: "Berlin, Germany",
-        date: "July 8, 2026",
-        href: "https://www.wearedevelopers.com/",
-        role: "Speaker",
-      },
-    ],
-  } satisfies Record<"upcoming" | "recent", Conference[]>,
+  conferences: conferences satisfies Record<
+    "upcoming" | "recent",
+    Conference[]
+  >,
 } as const;
 
 export const navigation = [

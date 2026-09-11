@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "location": {
+    "city": "Zurich",
+    "country": "Switzerland",
+    "updatedOn": "2026-09-10",
+    "coordinates": {
+      "x": 52,
+      "y": 34
+    }
+  },
+  "events": [
+    {
+      "id": "agentcon-london-2026",
+      "name": "Agentcon London",
+      "city": "London",
+      "country": "United Kingdom",
+      "startsOn": "2026-09-08",
+      "endsOn": "2026-09-08",
+      "url": "https://globalai.community/e/x79ncrl7",
+      "role": "Speaker",
+      "status": "past"
+    },
+    {
+      "id": "zurichjs-conf-2026",
+      "name": "ZurichJS Conf 2026",
+      "city": "Zurich",
+      "country": "Switzerland",
+      "startsOn": "2026-09-11",
+      "endsOn": "2026-09-11",
+      "url": "https://conf.zurichjs.com/",
+      "role": "Speaker",
+      "status": "past"
+    },
+    {
+      "id": "ai-workshop-day-2026",
+      "name": "AI Workshop Day",
+      "city": "Berlin",
+      "country": "Germany",
+      "startsOn": "2026-09-15",
+      "endsOn": "2026-09-15",
+      "url": "https://aieclipse.org/ai-workshop/"
+    },
+    {
+      "id": "next-app-dev-2026",
+      "name": "next.app.dev",
+      "city": "Berlin",
+      "country": "Germany",
+      "startsOn": "2026-10-07",
+      "endsOn": "2026-10-09",
+      "url": "https://www.nextappcon.com/"
+    },
+    {
+      "id": "cityjs-athens-2026",
+      "name": "CityJS Athens",
+      "city": "Athens",
+      "country": "Greece",
+      "startsOn": "2026-10-21",
+      "endsOn": "2026-10-23",
+      "url": "https://greece.cityjsconf.org/"
+    },
+    {
+      "id": "devfest-trabzon-2026",
+      "name": "DevFest Trabzon",
+      "city": "Trabzon",
+      "country": "Türkiye",
+      "startsOn": "2026-10-31",
+      "endsOn": "2026-10-31",
+      "url": "https://devfest.gdgtrabzon.com/"
+    },
+    {
+      "id": "devoxx-morocco-2026",
+      "name": "Devoxx Morocco",
+      "city": "Casablanca",
+      "country": "Morocco",
+      "startsOn": "2026-11-04",
+      "endsOn": "2026-11-05",
+      "url": "https://devoxx.ma/"
+    },
+    {
+      "id": "flutter-and-friends-2026",
+      "name": "Flutter and Friends",
+      "city": "Stockholm",
+      "country": "Sweden",
+      "startsOn": "2026-09-03",
+      "endsOn": "2026-09-05",
+      "url": "https://flutterfriends.dev/",
+      "role": "Workshop"
+    },
+    {
+      "id": "wearedevelopers-2026",
+      "name": "WeAreDevelopers",
+      "city": "Berlin",
+      "country": "Germany",
+      "startsOn": "2026-07-08",
+      "endsOn": "2026-07-08",
+      "url": "https://www.wearedevelopers.com/",
+      "role": "Speaker"
+    }
+  ]
+}
