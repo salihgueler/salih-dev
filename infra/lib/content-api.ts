@@ -65,7 +65,6 @@ export class ContentApi extends Construct {
       logGroup: writeLogs,
       memorySize: 256,
       projectRoot,
-      reservedConcurrentExecutions: 2,
       runtime: lambda.Runtime.NODEJS_24_X,
       timeout: Duration.seconds(10),
     });
