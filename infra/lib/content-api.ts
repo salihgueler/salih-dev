@@ -17,7 +17,7 @@ import { suppressBasicLambdaLoggingPolicy } from "./lambda-log-suppressions";
 
 export interface ContentApiProps {
   contentBucket: s3.IBucket;
-  editor: iam.User;
+  editor: iam.IUser;
   publisher: codebuild.IProject;
 }
 
@@ -129,7 +129,7 @@ export class ContentApi extends Construct {
       throttle: { burstLimit: 10, rateLimit: 5 },
     });
 
-    props.editor.addToPolicy(
+    props.editor.addToPrincipalPolicy(
       new iam.PolicyStatement({
         actions: ["execute-api:Invoke"],
         resources: [

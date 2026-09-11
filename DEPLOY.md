@@ -197,7 +197,8 @@ protected; deleting a CDK stack does not delete retained content.
 ## 9. Manage location and events through the content API
 
 The content API accepts only SigV4 requests from the retained
-`salih-dev-editor` IAM user. CDK intentionally creates no password or access key.
+`salih-dev-editor` IAM user. The stack references this user and intentionally
+provisions no password or access key.
 After the first API deployment, sign in as root one final time to enable console
 access for that user and register MFA. Do not create an access key. Then use AWS
 CLI login to obtain automatically refreshed temporary credentials:

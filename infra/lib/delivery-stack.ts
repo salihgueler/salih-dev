@@ -48,10 +48,11 @@ export class SalihDevDeliveryStack extends Stack {
   ) {
     super(scope, id, props);
 
-    const contentEditor = new iam.User(this, "ContentEditor", {
-      userName: "salih-dev-editor",
-    });
-    contentEditor.applyRemovalPolicy(RemovalPolicy.RETAIN);
+    const contentEditor = iam.User.fromUserName(
+      this,
+      "ContentEditor",
+      "salih-dev-editor",
+    );
     new CfnOutput(this, "ContentEditorUserArn", {
       description:
         "Dedicated non-root identity for SigV4-authenticated site content updates.",
