@@ -55,9 +55,8 @@ Current location and conference events use the versioned schema in
 `src/config/site-content.default.json`; production builds load
 `site/content.v1.json` from the retained content bucket. The IAM-authenticated
 content API updates that object and starts the existing publisher, so content
-changes do not require a CDK deployment. During the root-only migration, the API
-uses an exact dual-ARN allowlist for account root and `salih-dev-editor`; the
-editor is removed only after root-signed reads and writes are verified.
+changes do not require a CDK deployment. The API uses an exact root-ARN allowlist
+for this personal account and has no public or alternate editor identity.
 
 The DEV importer uses reviewed category and summary metadata, writes normalized
 Markdown, and downloads deterministic banner files under

@@ -196,32 +196,27 @@ protected; deleting a CDK stack does not delete retained content.
 
 ## 9. Manage location and events through the content API
 
-During the root-only migration, the content API accepts SigV4 requests from
-exactly these two identities:
+The content API accepts SigV4 requests only from:
 
-- `arn:aws:iam::018525129316:root`
-- `arn:aws:iam::018525129316:user/salih-dev-editor`
-
-This is migration stage 1. Do not delete `salih-dev-editor` yet. First deploy
-this dual allowlist, verify a root-signed GET and conditional PUT, then deploy
-stage 2 with only the root ARN. Delete the editor user only after the root-only
-deployment is verified.
-
-The stack references the existing editor user and intentionally provisions no
-password or access key. The editor route remains available during stage 1:
-
-```sh
-aws login --profile salih-dev-editor
-aws sts get-caller-identity --profile salih-dev-editor
+```text
+arn:aws:iam::018525129316:root
 ```
 
-The caller ARN must be
-`arn:aws:iam::018525129316:user/salih-dev-editor`. Export the temporary session
-into the current shell for curl signing:
+This root-only model was explicitly chosen for the personal account. Keep root
+MFA enabled, use short-lived `aws login` credentials, and never create a root
+access key. Authenticate and verify the exact caller before editing content:
+
+```sh
+aws login --profile personal
+aws sts get-caller-identity --profile personal
+```
+
+The caller ARN must be `arn:aws:iam::018525129316:root`. Export the temporary
+session into the current shell for curl signing:
 
 ```sh
 eval "$(aws configure export-credentials \
-  --profile salih-dev-editor \
+  --profile personal \
   --format env)"
 ```
 
