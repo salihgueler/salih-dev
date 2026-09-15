@@ -196,12 +196,19 @@ protected; deleting a CDK stack does not delete retained content.
 
 ## 9. Manage location and events through the content API
 
-The content API accepts only SigV4 requests from the retained
-`salih-dev-editor` IAM user. The stack references this user and intentionally
-provisions no password or access key.
-After the first API deployment, sign in as root one final time to enable console
-access for that user and register MFA. Do not create an access key. Then use AWS
-CLI login to obtain automatically refreshed temporary credentials:
+During the root-only migration, the content API accepts SigV4 requests from
+exactly these two identities:
+
+- `arn:aws:iam::018525129316:root`
+- `arn:aws:iam::018525129316:user/salih-dev-editor`
+
+This is migration stage 1. Do not delete `salih-dev-editor` yet. First deploy
+this dual allowlist, verify a root-signed GET and conditional PUT, then deploy
+stage 2 with only the root ARN. Delete the editor user only after the root-only
+deployment is verified.
+
+The stack references the existing editor user and intentionally provisions no
+password or access key. The editor route remains available during stage 1:
 
 ```sh
 aws login --profile salih-dev-editor

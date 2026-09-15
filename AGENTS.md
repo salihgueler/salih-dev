@@ -81,6 +81,9 @@ metrics or browser canaries.
   nameservers without separate explicit approval and a complete DNS inventory.
 - Retained state and analytics buckets may survive stack deletion; do not delete
   production resources or disable retention protections without approval.
+- Content API identity migrations must follow dual allowlist -> verify root GET
+  and conditional PUT -> deploy root-only -> verify again -> delete the editor.
+  Never delete `salih-dev-editor` before the verified root-only deployment.
 
 ## Git
 
