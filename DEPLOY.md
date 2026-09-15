@@ -240,6 +240,7 @@ object that already exists:
 
 ```sh
 curl --fail-with-body \
+  --request PUT \
   --aws-sigv4 "aws:amz:us-east-1:execute-api" \
   --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY" \
   --header "x-amz-security-token: $AWS_SESSION_TOKEN" \
@@ -270,6 +271,7 @@ returns HTTP 412 instead of overwriting a newer update:
 
 ```sh
 curl --fail-with-body \
+  --request PUT \
   --aws-sigv4 "aws:amz:us-east-1:execute-api" \
   --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY" \
   --header "x-amz-security-token: $AWS_SESSION_TOKEN" \
