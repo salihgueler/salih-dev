@@ -48,6 +48,12 @@ export class SalihDevDeliveryStack extends Stack {
   ) {
     super(scope, id, props);
 
+    const rootEditorArn = Stack.of(this).formatArn({
+      account: Stack.of(this).account,
+      region: "",
+      resource: "root",
+      service: "iam",
+    });
     const contentEditor = iam.User.fromUserName(
       this,
       "ContentEditor",
@@ -55,8 +61,13 @@ export class SalihDevDeliveryStack extends Stack {
     );
     new CfnOutput(this, "ContentEditorUserArn", {
       description:
-        "Dedicated non-root identity for SigV4-authenticated site content updates.",
+        "Dedicated non-root identity retained during the root-access migration.",
       value: contentEditor.userArn,
+    });
+    new CfnOutput(this, "ContentRootPrincipalArn", {
+      description:
+        "Account root identity temporarily allowed alongside the content editor.",
+      value: rootEditorArn,
     });
 
     const siteBucket = new s3.Bucket(this, "SiteBucket", {
@@ -306,6 +317,7 @@ export class SalihDevDeliveryStack extends Stack {
     );
 
     new ContentApi(this, "ContentApi", {
+      allowedCallerArns: [rootEditorArn, contentEditor.userArn],
       contentBucket: props.contentBucket,
       editor: contentEditor,
       publisher: project,

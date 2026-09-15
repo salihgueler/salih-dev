@@ -16,6 +16,7 @@ import { CONTENT_KEY } from "../functions/content-api-shared";
 import { suppressBasicLambdaLoggingPolicy } from "./lambda-log-suppressions";
 
 export interface ContentApiProps {
+  allowedCallerArns: string[];
   contentBucket: s3.IBucket;
   editor: iam.IUser;
   publisher: codebuild.IProject;
@@ -28,8 +29,8 @@ export class ContentApi extends Construct {
     const projectRoot = path.resolve(__dirname, "../..");
     const lockFile = path.resolve(__dirname, "../package-lock.json");
     const commonEnvironment = {
+      CONTENT_ALLOWED_CALLER_ARNS: props.allowedCallerArns.join(","),
       CONTENT_BUCKET_NAME: props.contentBucket.bucketName,
-      CONTENT_EDITOR_ARN: props.editor.userArn,
     };
 
     const readLogs = new logs.LogGroup(this, "ReadLogs", {

@@ -9,9 +9,12 @@ export const MAX_CONTENT_BYTES = 64 * 1024;
 export function isExpectedEditor(
   event: APIGatewayProxyEventV2WithIAMAuthorizer,
 ): boolean {
-  const expected = process.env.CONTENT_EDITOR_ARN;
+  const allowedArns = (process.env.CONTENT_ALLOWED_CALLER_ARNS ?? "")
+    .split(",")
+    .map((arn) => arn.trim())
+    .filter(Boolean);
   const actual = event.requestContext.authorizer.iam.userArn;
-  const allowed = Boolean(expected && actual === expected);
+  const allowed = allowedArns.includes(actual);
   console.log(
     JSON.stringify({
       action: "authorize-content-editor",

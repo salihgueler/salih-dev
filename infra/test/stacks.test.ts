@@ -129,6 +129,18 @@ test("adds privacy-first analytics and low-cost monitoring", () => {
   // Monitoring: analytics widget, homepage checker, two content API functions,
   // operations dashboard, and no browser canary.
   delivery.resourceCountIs("AWS::Lambda::Function", 4);
+  const lambdaFunctions = delivery.findResources("AWS::Lambda::Function");
+  const contentAllowLists = Object.values(lambdaFunctions)
+    .map(
+      (resource) =>
+        resource.Properties.Environment?.Variables
+          ?.CONTENT_ALLOWED_CALLER_ARNS,
+    )
+    .filter(Boolean);
+  assert.equal(contentAllowLists.length, 2);
+  const serializedAllowLists = JSON.stringify(contentAllowLists);
+  assert.match(serializedAllowLists, /:iam::111111111111:root/);
+  assert.match(serializedAllowLists, /:iam::111111111111:user\/salih-dev-editor/);
   delivery.resourceCountIs("AWS::Events::Rule", 1);
   delivery.resourceCountIs("AWS::CloudWatch::Dashboard", 1);
   delivery.resourceCountIs("AWS::Synthetics::Canary", 0);
