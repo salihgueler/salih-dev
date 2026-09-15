@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "location": {
-    "city": "Zurich",
-    "country": "Switzerland",
-    "updatedOn": "2026-09-10",
+    "city": "Berlin",
+    "country": "Germany",
+    "updatedOn": "2026-09-15",
     "coordinates": {
-      "x": 52,
-      "y": 34
+      "x": 53,
+      "y": 32
     }
   },
   "events": [
