@@ -232,8 +232,11 @@ trailing slash:
 export SITE_CONTENT_API="<ContentApiUrl>"
 ```
 
-Initialize the retained content object once. The conditional header prevents
-accidentally replacing an object that already exists:
+Initialize the retained content object once. Before initialization, an authorized
+GET returns HTTP 404 with `content_not_initialized`; this confirms authorization
+worked and the object is absent. Use `If-None-Match: *` for the first write rather
+than an ETag update. The conditional header prevents accidentally replacing an
+object that already exists:
 
 ```sh
 curl --fail-with-body \

@@ -73,6 +73,12 @@ export class ContentApi extends Construct {
     const objectArn = props.contentBucket.arnForObjects(CONTENT_KEY);
     readFunction.addToRolePolicy(
       new iam.PolicyStatement({
+        actions: ["s3:ListBucket"],
+        resources: [props.contentBucket.bucketArn],
+      }),
+    );
+    readFunction.addToRolePolicy(
+      new iam.PolicyStatement({
         actions: ["s3:GetObject"],
         resources: [objectArn],
       }),
