@@ -18,7 +18,6 @@ import { suppressBasicLambdaLoggingPolicy } from "./lambda-log-suppressions";
 export interface ContentApiProps {
   allowedCallerArns: string[];
   contentBucket: s3.IBucket;
-  editor: iam.IUser;
   publisher: codebuild.IProject;
 }
 
@@ -135,16 +134,6 @@ export class ContentApi extends Construct {
       stageName: "$default",
       throttle: { burstLimit: 10, rateLimit: 5 },
     });
-
-    props.editor.addToPrincipalPolicy(
-      new iam.PolicyStatement({
-        actions: ["execute-api:Invoke"],
-        resources: [
-          api.arnForExecuteApi("GET", "/v1/content", "$default"),
-          api.arnForExecuteApi("PUT", "/v1/content", "$default"),
-        ],
-      }),
-    );
 
     for (const fn of [readFunction, writeFunction]) {
       suppressBasicLambdaLoggingPolicy(fn, "one-month API execution logs");

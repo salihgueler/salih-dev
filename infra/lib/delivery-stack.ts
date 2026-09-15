@@ -54,19 +54,8 @@ export class SalihDevDeliveryStack extends Stack {
       resource: "root",
       service: "iam",
     });
-    const contentEditor = iam.User.fromUserName(
-      this,
-      "ContentEditor",
-      "salih-dev-editor",
-    );
-    new CfnOutput(this, "ContentEditorUserArn", {
-      description:
-        "Dedicated non-root identity retained during the root-access migration.",
-      value: contentEditor.userArn,
-    });
     new CfnOutput(this, "ContentRootPrincipalArn", {
-      description:
-        "Account root identity temporarily allowed alongside the content editor.",
+      description: "Account root identity allowed for site content updates.",
       value: rootEditorArn,
     });
 
@@ -317,9 +306,8 @@ export class SalihDevDeliveryStack extends Stack {
     );
 
     new ContentApi(this, "ContentApi", {
-      allowedCallerArns: [rootEditorArn, contentEditor.userArn],
+      allowedCallerArns: [rootEditorArn],
       contentBucket: props.contentBucket,
-      editor: contentEditor,
       publisher: project,
     });
 

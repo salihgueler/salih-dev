@@ -140,7 +140,7 @@ test("adds privacy-first analytics and low-cost monitoring", () => {
   assert.equal(contentAllowLists.length, 2);
   const serializedAllowLists = JSON.stringify(contentAllowLists);
   assert.match(serializedAllowLists, /:iam::111111111111:root/);
-  assert.match(serializedAllowLists, /:iam::111111111111:user\/salih-dev-editor/);
+  assert.doesNotMatch(serializedAllowLists, /salih-dev-editor/);
   delivery.resourceCountIs("AWS::Events::Rule", 1);
   delivery.resourceCountIs("AWS::CloudWatch::Dashboard", 1);
   delivery.resourceCountIs("AWS::Synthetics::Canary", 0);
