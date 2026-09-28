@@ -1,0 +1,118 @@
+---
+/**
+ * One published talk entry.
+ *
+ * Feature: talks-section
+ *
+ * The card renders the complete public information for a single talk as static
+ * HTML so the archive is fully usable with no JavaScript. It consumes only the
+ * pure `TalkCardView` projection, so it never reads a raw record, never derives
+ * a URL of its own, and never sees the repository-internal slide file path.
+ *
+ * Occurrence rules encoded here:
+ *
+ * - the talk title is displayed exactly once, as the entry heading;
+ * - the event name is displayed exactly once, as the label of the event link
+ *   whose destination is the validated event URL;
+ * - the location is displayed exactly once;
+ * - exactly the event-type labels assigned to this talk are displayed, once
+ *   each, and no label belonging to another talk;
+ * - exactly one slide link is rendered, with the visible copy `PDF slides` and
+ *   an accessible name containing both `PDF slides` and the talk title;
+ * - a `Source code` link is rendered exactly once, and only when the talk
+ *   carries a validated github.com source URL, with the visible copy
+ *   `Source code` and an accessible name containing both `Source code` and the
+ *   talk title.
+ *
+ * Metadata sits in a description list inside the article, so every value stays
+ * programmatically associated with its own talk and its own label.
+ *
+ * Author text is only ever interpolated as text or as an already-validated
+ * attribute value. Filtering hooks use the code-owned event-type identifiers
+ * from the projection, so no author label reaches a selector or a script.
+ *
+ * The optional media region is exactly one click-to-load `TalkVideo`, rendered
+ * only when this talk has a normalized video, and always after the metadata and
+ * the slide action. A talk without a video renders no media region at all, and a
+ * failing or blocked video cannot affect the metadata or the slide action.
+ */
+
+import type { TalkCardView } from "../lib/talks/projection";
+import TalkVideo from "./TalkVideo.astro";
+
+interface Props {
+  card: TalkCardView;
+}
+
+const { card } = Astro.props;
+
+/**
+ * Slide-link accessible name. It intentionally repeats the title for assistive
+ * technology only; the visible copy stays `PDF slides`, so the title is still
+ * displayed exactly once in the entry.
+ */
+const slidesLabel = `PDF slides for ${card.title}`;
+
+/**
+ * Source-code-link accessible name. Present only when the talk carries a
+ * validated github.com source URL; the visible copy stays `Source code`, so no
+ * repository text is displayed twice in the entry.
+ */
+const sourceCodeLabel = `Source code for ${card.title}`;
+
+/**
+ * Generated event-type identifiers of this talk, used by the progressive filter
+ * to toggle the article's `hidden` state. Never author text.
+ */
+const eventTypeIds = card.eventTypeIds.join(" ");
+---
+
+<article
+  class="talk-card"
+  data-talk-card
+  data-talk-id={card.id}
+  data-talk-event-types={eventTypeIds}
+>
+  <h2 class="talk-title">{card.title}</h2>
+  <dl class="talk-meta">
+    <div class="talk-meta-item">
+      <dt>Event</dt>
+      <dd>
+        <a class="talk-event-link" href={card.eventUrl}>{card.eventName}</a>
+      </dd>
+    </div>
+    <div class="talk-meta-item">
+      <dt>Date</dt>
+      <dd><time datetime={card.date}>{card.displayDate}</time></dd>
+    </div>
+    <div class="talk-meta-item">
+      <dt>Location</dt>
+      <dd>{card.location}</dd>
+    </div>
+    <div class="talk-meta-item">
+      <dt>Event types</dt>
+      <dd>
+        <ul class="talk-tags">
+          {card.tags.map((tag) => <li class="talk-tag">{tag.label}</li>)}
+        </ul>
+      </dd>
+    </div>
+  </dl>
+  <p class="talk-actions">
+    <a class="talk-slides-link" href={card.slidePath} aria-label={slidesLabel}>
+      PDF slides
+    </a>
+    {
+      card.sourceCodeUrl !== null && (
+        <a
+          class="talk-source-link"
+          href={card.sourceCodeUrl}
+          aria-label={sourceCodeLabel}
+        >
+          Source code
+        </a>
+      )
+    }
+  </p>
+  {card.video !== null && <TalkVideo video={card.video} talkTitle={card.title} />}
+</article>

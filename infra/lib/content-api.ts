@@ -15,6 +15,10 @@ import { Construct } from "constructs";
 import { CONTENT_KEY } from "../functions/content-api-shared";
 import { suppressBasicLambdaLoggingPolicy } from "./lambda-log-suppressions";
 
+const PENDING_TALK_OBJECTS = "talks/pending/*";
+const APPROVED_TALK_DECKS = "talks/decks/*";
+const API_TALK_RECORDS = "talks/records/*";
+
 export interface ContentApiProps {
   allowedCallerArns: string[];
   contentBucket: s3.IBucket;
@@ -30,6 +34,10 @@ export class ContentApi extends Construct {
     const commonEnvironment = {
       CONTENT_ALLOWED_CALLER_ARNS: props.allowedCallerArns.join(","),
       CONTENT_BUCKET_NAME: props.contentBucket.bucketName,
+    };
+    const publisherEnvironment = {
+      ...commonEnvironment,
+      PUBLISHER_PROJECT_NAME: props.publisher.projectName,
     };
 
     const readLogs = new logs.LogGroup(this, "ReadLogs", {
@@ -58,10 +66,7 @@ export class ContentApi extends Construct {
       bundling: { minify: true, target: "node24" },
       depsLockFilePath: lockFile,
       entry: path.resolve(__dirname, "../functions/content-write.ts"),
-      environment: {
-        ...commonEnvironment,
-        PUBLISHER_PROJECT_NAME: props.publisher.projectName,
-      },
+      environment: publisherEnvironment,
       logGroup: writeLogs,
       memorySize: 256,
       projectRoot,
@@ -69,7 +74,85 @@ export class ContentApi extends Construct {
       timeout: Duration.seconds(10),
     });
 
+    const talkUploadStartLogs = new logs.LogGroup(this, "TalkUploadStartLogs", {
+      removalPolicy: RemovalPolicy.DESTROY,
+      retention: logs.RetentionDays.ONE_MONTH,
+    });
+    const talkUploadStartFunction = new NodejsFunction(
+      this,
+      "TalkUploadStartFunction",
+      {
+        architecture: lambda.Architecture.ARM_64,
+        bundling: { minify: true, target: "node24" },
+        depsLockFilePath: lockFile,
+        entry: path.resolve(__dirname, "../functions/talk-upload-start.ts"),
+        environment: commonEnvironment,
+        logGroup: talkUploadStartLogs,
+        memorySize: 256,
+        projectRoot,
+        runtime: lambda.Runtime.NODEJS_24_X,
+        timeout: Duration.seconds(10),
+      },
+    );
+
+    const talkUploadCompleteLogs = new logs.LogGroup(
+      this,
+      "TalkUploadCompleteLogs",
+      {
+        removalPolicy: RemovalPolicy.DESTROY,
+        retention: logs.RetentionDays.ONE_MONTH,
+      },
+    );
+    const talkUploadCompleteFunction = new NodejsFunction(
+      this,
+      "TalkUploadCompleteFunction",
+      {
+        architecture: lambda.Architecture.ARM_64,
+        bundling: {
+          minify: true,
+          nodeModules: ["pdfjs-dist"],
+          target: "node24",
+        },
+        depsLockFilePath: lockFile,
+        entry: path.resolve(__dirname, "../functions/talk-upload-complete.ts"),
+        environment: publisherEnvironment,
+        logGroup: talkUploadCompleteLogs,
+        memorySize: 1769,
+        projectRoot,
+        runtime: lambda.Runtime.NODEJS_24_X,
+        timeout: Duration.seconds(29),
+      },
+    );
+
+    const talkRecordsLogs = new logs.LogGroup(this, "TalkRecordsLogs", {
+      removalPolicy: RemovalPolicy.DESTROY,
+      retention: logs.RetentionDays.ONE_MONTH,
+    });
+    const talkRecordsFunction = new NodejsFunction(
+      this,
+      "TalkRecordsFunction",
+      {
+        architecture: lambda.Architecture.ARM_64,
+        bundling: { minify: true, target: "node24" },
+        depsLockFilePath: lockFile,
+        entry: path.resolve(__dirname, "../functions/talk-records.ts"),
+        environment: publisherEnvironment,
+        logGroup: talkRecordsLogs,
+        memorySize: 256,
+        projectRoot,
+        runtime: lambda.Runtime.NODEJS_24_X,
+        timeout: Duration.seconds(10),
+      },
+    );
+
     const objectArn = props.contentBucket.arnForObjects(CONTENT_KEY);
+    const pendingTalkObjectsArn =
+      props.contentBucket.arnForObjects(PENDING_TALK_OBJECTS);
+    const approvedTalkDecksArn =
+      props.contentBucket.arnForObjects(APPROVED_TALK_DECKS);
+    const apiTalkRecordsArn =
+      props.contentBucket.arnForObjects(API_TALK_RECORDS);
+
     readFunction.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ["s3:ListBucket"],
@@ -95,6 +178,72 @@ export class ContentApi extends Construct {
       }),
     );
 
+    talkUploadStartFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["s3:PutObject"],
+        resources: [pendingTalkObjectsArn],
+      }),
+    );
+    talkUploadStartFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["s3:GetObject"],
+        resources: [apiTalkRecordsArn],
+      }),
+    );
+
+    talkUploadCompleteFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["s3:GetObject", "s3:DeleteObject"],
+        resources: [pendingTalkObjectsArn],
+      }),
+    );
+    talkUploadCompleteFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+        resources: [approvedTalkDecksArn],
+      }),
+    );
+    talkUploadCompleteFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["s3:GetObject", "s3:PutObject"],
+        resources: [apiTalkRecordsArn],
+      }),
+    );
+    talkUploadCompleteFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["codebuild:StartBuild"],
+        resources: [props.publisher.projectArn],
+      }),
+    );
+
+    talkRecordsFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["s3:ListBucket"],
+        conditions: {
+          StringLike: { "s3:prefix": [API_TALK_RECORDS] },
+        },
+        resources: [props.contentBucket.bucketArn],
+      }),
+    );
+    talkRecordsFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["s3:GetObject", "s3:DeleteObject"],
+        resources: [apiTalkRecordsArn],
+      }),
+    );
+    talkRecordsFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["s3:DeleteObject"],
+        resources: [approvedTalkDecksArn],
+      }),
+    );
+    talkRecordsFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["codebuild:StartBuild"],
+        resources: [props.publisher.projectArn],
+      }),
+    );
+
     const authorizer = new HttpIamAuthorizer();
     const api = new apigwv2.HttpApi(this, "Api", {
       apiName: "salih-dev-content",
@@ -111,6 +260,38 @@ export class ContentApi extends Construct {
       integration: new HttpLambdaIntegration("WriteIntegration", writeFunction),
       methods: [apigwv2.HttpMethod.PUT],
       path: "/v1/content",
+    });
+    api.addRoutes({
+      integration: new HttpLambdaIntegration(
+        "TalkUploadStartIntegration",
+        talkUploadStartFunction,
+      ),
+      methods: [apigwv2.HttpMethod.POST],
+      path: "/v1/talks/uploads",
+    });
+    api.addRoutes({
+      integration: new HttpLambdaIntegration(
+        "TalkUploadCompleteIntegration",
+        talkUploadCompleteFunction,
+      ),
+      methods: [apigwv2.HttpMethod.POST],
+      path: "/v1/talks/uploads/{deckId}/completion",
+    });
+    api.addRoutes({
+      integration: new HttpLambdaIntegration(
+        "TalkRecordsListIntegration",
+        talkRecordsFunction,
+      ),
+      methods: [apigwv2.HttpMethod.GET],
+      path: "/v1/talks/records",
+    });
+    api.addRoutes({
+      integration: new HttpLambdaIntegration(
+        "TalkRecordsDeleteIntegration",
+        talkRecordsFunction,
+      ),
+      methods: [apigwv2.HttpMethod.DELETE],
+      path: "/v1/talks/records/{recordKey}",
     });
 
     const accessLogs = new logs.LogGroup(this, "AccessLogs", {
@@ -135,7 +316,13 @@ export class ContentApi extends Construct {
       throttle: { burstLimit: 10, rateLimit: 5 },
     });
 
-    for (const fn of [readFunction, writeFunction]) {
+    for (const fn of [
+      readFunction,
+      writeFunction,
+      talkUploadStartFunction,
+      talkUploadCompleteFunction,
+      talkRecordsFunction,
+    ]) {
       suppressBasicLambdaLoggingPolicy(fn, "one-month API execution logs");
     }
 

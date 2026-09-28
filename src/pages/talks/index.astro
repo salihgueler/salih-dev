@@ -1,0 +1,88 @@
+---
+/**
+ * The canonical public Talks page.
+ *
+ * Feature: talks-section
+ *
+ * The page resolves the published snapshot exactly once through the shared
+ * gateway promise and projects it once, so the archive, the filter options, and
+ * the structured data all describe the same validated version of the same
+ * records. It never reads a raw collection entry and never re-derives a URL,
+ * a date, or an event-type identifier of its own.
+ *
+ * Composition rules encoded here:
+ *
+ * - `documentTitle` makes the document title exactly `Talks` while social
+ *   metadata keeps its site-qualified form;
+ * - exactly one `h1` carries the visible text `Talks`;
+ * - `TalkArchive` is already a labeled section, so it is composed directly
+ *   rather than wrapped in a second landmark;
+ * - `TalkFilter` renders nothing when the snapshot yields no event-type option,
+ *   so an empty archive shows the approved message and no unusable controls.
+ *
+ * The `CollectionPage` structured data describes the ordering and identity of
+ * the published talks only: one `ItemList` entry per published talk, carrying
+ * the visible title and the public slide URL that is already rendered as a
+ * link. It repeats no other visible copy and, because it is built from the
+ * published snapshot, it cannot expose a draft record.
+ */
+
+import TalkArchive from "../../components/TalkArchive.astro";
+import TalkFilter from "../../components/TalkFilter.astro";
+import { site } from "../../config/site";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { canonicalUrl } from "../../lib/discovery";
+import { getPublishedTalksSnapshot } from "../../lib/talks/gateway";
+import { projectTalkArchive } from "../../lib/talks/projection";
+
+const talks = await getPublishedTalksSnapshot();
+const archive = projectTalkArchive(talks);
+const canonical = canonicalUrl("/talks/");
+
+const talksStructuredData = {
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  name: "Talks",
+  url: canonical,
+  inLanguage: "en",
+  isPartOf: {
+    "@type": "WebSite",
+    name: site.name,
+    url: site.url,
+  },
+  mainEntity: {
+    "@type": "ItemList",
+    name: "Talks",
+    itemListOrder: "https://schema.org/ItemListOrderDescending",
+    numberOfItems: archive.cards.length,
+    itemListElement: archive.cards.map((card, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: card.title,
+      url: card.slidePublicUrl,
+    })),
+  },
+};
+---
+
+<BaseLayout
+  title="Talks"
+  documentTitle="Talks"
+  description="Conference and community talks by Salih Güler, with the slide deck and, where one exists, the recording for each talk."
+  structuredData={talksStructuredData}
+>
+  <header class="page-intro">
+    <h1>Talks</h1>
+    <p>
+      Conference and community presentations on frontend and mobile
+      development, developer experience, and building on the cloud. Every
+      published talk links its event, its slide deck, and a recording when one
+      exists.
+    </p>
+  </header>
+  <TalkFilter
+    allTalksOption={archive.allTalksOption}
+    filterOptions={archive.filterOptions}
+  />
+  <TalkArchive archive={archive} />
+</BaseLayout>

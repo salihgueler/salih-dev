@@ -10,6 +10,9 @@ export const GET: APIRoute = async () => {
     markdownForPath("/"),
     markdownForPath("/about/"),
     markdownForPath("/contact/"),
+    // The Talks Markdown document exactly once, from the same shared published
+    // snapshot the archive and the `/talks/index.md` route use.
+    markdownForPath("/talks/"),
     ...posts.map((post) => markdownForPath(`/blog/${post.id}/`)),
   ]);
 

@@ -34,6 +34,10 @@ export class SalihDevStateStack extends Stack {
         {
           noncurrentVersionExpiration: Duration.days(90),
         },
+        {
+          expiration: Duration.days(1),
+          prefix: "talks/pending/",
+        },
       ],
       objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
       removalPolicy: RemovalPolicy.RETAIN,

@@ -7,6 +7,7 @@ export function markdownAlternatePath(pathname: string): string | null {
 
   if (path === "/") return "/index.md";
   if (path === "/blog/") return "/blog/index.md";
+  if (path === "/talks/") return "/talks/index.md";
   if (path === "/about/") return "/about.md";
   if (path === "/contact/") return "/contact.md";
 

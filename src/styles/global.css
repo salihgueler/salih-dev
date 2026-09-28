@@ -121,7 +121,9 @@ button:focus-visible {
 }
 
 .header-links nav ul {
-  gap: clamp(18px, 2.4vw, 38px);
+  flex-wrap: wrap;
+  column-gap: clamp(18px, 2.4vw, 38px);
+  row-gap: 14px;
 }
 
 .header-links nav a {
@@ -624,6 +626,234 @@ button:focus-visible {
   color: var(--muted);
 }
 
+/*
+ * Talks archive.
+ *
+ * The section extends the incumbent paper/ink/mono/accent system: hairline
+ * rules separate entries, metadata sits in its own narrow rail, and no card
+ * shadow, gradient, rounded pill, or second display face is introduced.
+ *
+ * Every rule that sets `display` on a togglable element is guarded with
+ * `:not([hidden])`. The filter root and each talk entry are shown and hidden
+ * through the `hidden` attribute, and a bare class selector would out-specify
+ * the `[hidden]` rule and keep filtered-out talks visible.
+ */
+
+.talk-filter:not([hidden]) {
+  display: block;
+  padding: 26px 0;
+  border-bottom: var(--rule);
+}
+
+.talk-filter-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.talk-filter-option {
+  position: relative;
+  padding: 8px 14px;
+  border: var(--rule);
+  border-radius: 0;
+  color: var(--ink);
+  background: var(--paper);
+  font: inherit;
+  font-size: 0.82rem;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.talk-filter-option:hover {
+  background: var(--soft);
+}
+
+.talk-filter-option[aria-pressed="true"] {
+  border-color: var(--ink);
+  color: var(--paper);
+  background: var(--ink);
+}
+
+/*
+ * The selected option reads as an inverted block carrying an accent rule, so
+ * the selected state is a fill and a shape change rather than color alone.
+ */
+.talk-filter-option[aria-pressed="true"]::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: var(--accent);
+  content: "";
+}
+
+.talk-archive {
+  padding-bottom: 92px;
+}
+
+.talks-result,
+.talks-no-match {
+  margin: 0;
+  padding: 30px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.talks-empty {
+  max-width: 46ch;
+  margin: 0;
+  padding: 64px 0 0;
+  color: var(--muted);
+  font-size: 1.05rem;
+}
+
+.talk-list {
+  margin-top: 26px;
+}
+
+.talk-card:not([hidden]) {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.28fr) minmax(0, 1fr);
+  column-gap: clamp(28px, 4vw, 76px);
+}
+
+.talk-card {
+  padding: 34px 0 38px;
+  border-top: var(--rule);
+}
+
+.talk-card > * {
+  min-width: 0;
+  grid-column: 2;
+}
+
+.talk-title {
+  max-width: 34ch;
+  margin: 0;
+  font-size: clamp(1.35rem, 2.2vw, 2.1rem);
+  font-weight: 600;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+/*
+ * The metadata rail spans the full entry height in the first column, so an
+ * entry with a video keeps its metadata in the narrow track instead of being
+ * pushed into it.
+ */
+.talk-meta {
+  display: grid;
+  grid-row: 1 / span 3;
+  grid-column: 1;
+  align-content: start;
+  gap: 18px;
+  margin: 0;
+}
+
+.talk-meta-item {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.talk-meta dt {
+  color: var(--muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.talk-meta dd {
+  margin: 0;
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+
+.talk-meta time {
+  font-size: 0.95rem;
+}
+
+.talk-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.talk-tag {
+  padding: 3px 8px;
+  border: var(--rule);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.talk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 22px 0 0;
+}
+
+.talk-slides-link {
+  display: inline-block;
+  padding: 9px 15px;
+  border: var(--rule);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.talk-slides-link:hover {
+  color: var(--paper);
+  background: var(--ink);
+}
+
+.talk-source-link {
+  display: inline-block;
+  padding: 9px 15px;
+  border: var(--rule);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.talk-source-link:hover {
+  color: var(--paper);
+  background: var(--ink);
+}
+
+.talk-video {
+  max-width: min(100%, 720px);
+}
+
+/*
+ * The media frame clips its own overflow, so the shared outset focus ring would
+ * be invisible on the play button. The indicator is drawn inside instead, as a
+ * paper keyline against the frame's ink surface with the accent ring adjacent to
+ * it: 4px total, enclosing the control, with both layers measured above 3:1
+ * against the colors they touch.
+ */
+.talk-video-play:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -4px;
+  box-shadow: inset 0 0 0 2px var(--paper);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .talk-filter-option,
+  .talk-slides-link,
+  .talk-source-link {
+    transition:
+      color 160ms ease,
+      background-color 160ms ease,
+      border-color 160ms ease;
+  }
+}
+
 @media (max-width: 980px) {
   .site-header {
     align-items: flex-start;
@@ -661,6 +891,30 @@ button:focus-visible {
   .latest-posts {
     padding-left: 0;
   }
+
+  /*
+   * Below the rail breakpoint the entry becomes one column and the metadata
+   * moves above the title as a wrapping row. `order` reorders the grid items
+   * without changing the component's DOM order or its reading semantics.
+   */
+  .talk-card:not([hidden]) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .talk-card > * {
+    grid-column: 1;
+  }
+
+  .talk-meta {
+    display: flex;
+    flex-wrap: wrap;
+    grid-row: auto;
+    grid-column: 1;
+    order: -1;
+    column-gap: clamp(20px, 4vw, 44px);
+    row-gap: 16px;
+    margin-bottom: 20px;
+  }
 }
 
 @media (max-width: 720px) {
@@ -683,18 +937,9 @@ button:focus-visible {
   }
 
   .header-links nav ul {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    justify-content: space-between;
-    gap: 8px;
-  }
-
-  .header-links nav li:nth-child(2) {
-    text-align: center;
-  }
-
-  .header-links nav li:last-child {
-    text-align: right;
+    justify-content: flex-start;
+    column-gap: clamp(16px, 5vw, 30px);
+    row-gap: 14px;
   }
 
   .location-sidebar {
@@ -767,5 +1012,40 @@ button:focus-visible {
   .article-body table {
     display: block;
     overflow-x: auto;
+  }
+
+  .talk-filter:not([hidden]) {
+    padding: 20px 0;
+  }
+
+  .talk-filter-group {
+    gap: 10px;
+  }
+
+  .talks-result,
+  .talks-no-match {
+    padding-top: 24px;
+  }
+
+  .talk-list {
+    margin-top: 22px;
+  }
+
+  .talk-card {
+    padding: 26px 0 30px;
+  }
+
+  .talk-title {
+    max-width: 100%;
+    font-size: 1.3rem;
+  }
+
+  .talk-meta {
+    column-gap: 22px;
+    row-gap: 14px;
+  }
+
+  .talk-archive {
+    padding-bottom: 68px;
   }
 }

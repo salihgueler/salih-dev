@@ -28,10 +28,7 @@ import type { Construct } from "constructs";
 
 import { Analytics } from "./analytics";
 import { ContentApi } from "./content-api";
-import {
-  viewerRequestCode,
-  viewerResponseCode,
-} from "./edge-functions";
+import { viewerRequestCode, viewerResponseCode } from "./edge-functions";
 import { Monitoring } from "./monitoring";
 
 export interface SalihDevDeliveryStackProps extends StackProps {
@@ -145,12 +142,9 @@ export class SalihDevDeliveryStack extends Stack {
             function: responseFunction,
           },
         ],
-        origin: origins.S3BucketOrigin.withOriginAccessControl(
-          siteBucket,
-        ),
+        origin: origins.S3BucketOrigin.withOriginAccessControl(siteBucket),
         responseHeadersPolicy: responseHeaders,
-        viewerProtocolPolicy:
-          cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
       },
       domainNames: [props.domainName, `www.${props.domainName}`],
       enableIpv6: true,
@@ -169,8 +163,7 @@ export class SalihDevDeliveryStack extends Stack {
         },
       ],
       httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
-      minimumProtocolVersion:
-        cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
+      minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
       priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
     });
 
@@ -225,11 +218,14 @@ export class SalihDevDeliveryStack extends Stack {
           },
           pre_build: {
             commands: [
-              "mkdir -p .cache public/images/blog",
+              'mkdir -p .cache public/images/blog "$TALK_RECORD_CACHE_PATH" "$TALK_DECK_CACHE_PATH"',
               'aws s3 cp "s3://$CONTENT_BUCKET/site/content.v1.json" "$SITE_CONTENT_PATH" --only-show-errors',
               'aws s3 sync "s3://$CONTENT_BUCKET/posts/" src/content/blog/ --only-show-errors',
               'aws s3 sync "s3://$CONTENT_BUCKET/images/" public/images/blog/ --only-show-errors',
               'aws s3 cp "s3://$CONTENT_BUCKET/state/dev-sync-manifest.json" .cache/dev-sync-manifest.json --only-show-errors || echo "No existing DEV manifest; running initial sync."',
+              'aws s3 sync "s3://$CONTENT_BUCKET/talks/records/" "$TALK_RECORD_CACHE_PATH" --delete --only-show-errors',
+              'aws s3 sync "s3://$CONTENT_BUCKET/talks/decks/" "$TALK_DECK_CACHE_PATH" --delete --only-show-errors',
+              "npm run materialize:talks",
             ],
           },
           build: {
@@ -257,8 +253,7 @@ export class SalihDevDeliveryStack extends Stack {
       }),
       concurrentBuildLimit: 1,
       environment: {
-        buildImage:
-          codebuild.LinuxLambdaBuildImage.AMAZON_LINUX_2023_NODE_22,
+        buildImage: codebuild.LinuxLambdaBuildImage.AMAZON_LINUX_2023_NODE_22,
         computeType: codebuild.ComputeType.LAMBDA_1GB,
       },
       environmentVariables: {
@@ -279,6 +274,12 @@ export class SalihDevDeliveryStack extends Stack {
         },
         SITE_URL: {
           value: `https://${props.domainName}`,
+        },
+        TALK_DECK_CACHE_PATH: {
+          value: ".cache/talk-decks",
+        },
+        TALK_RECORD_CACHE_PATH: {
+          value: ".cache/talk-records",
         },
       },
       logging: {
@@ -417,7 +418,8 @@ export class SalihDevDeliveryStack extends Stack {
       value: project.projectName,
     });
     new CfnOutput(this, "BuildAlarmTopicArn", {
-      description: "Subscribe an email endpoint to receive build failure alerts.",
+      description:
+        "Subscribe an email endpoint to receive build failure alerts.",
       value: alarmTopic.topicArn,
     });
   }

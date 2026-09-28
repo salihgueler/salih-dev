@@ -20,6 +20,7 @@ function qualityFor(accept, type) {
 function markdownPath(uri) {
   if (uri === "/") return "/index.md";
   if (uri === "/blog" || uri === "/blog/") return "/blog/index.md";
+  if (uri === "/talks" || uri === "/talks/") return "/talks/index.md";
   if (uri === "/about" || uri === "/about/") return "/about.md";
   if (uri === "/contact" || uri === "/contact/") return "/contact.md";
   var match = uri.match(/^\\/(blog|categories|tags)\\/([^/]+)\\/?$/);
@@ -89,6 +90,9 @@ function representationPaths(uri) {
   }
   if (uri === "/blog/index.html" || uri === "/blog/index.md") {
     return { canonical: "/blog/", markdown: "/blog/index.md" };
+  }
+  if (uri === "/talks/index.html" || uri === "/talks/index.md") {
+    return { canonical: "/talks/", markdown: "/talks/index.md" };
   }
   if (uri === "/about/index.html" || uri === "/about.md") {
     return { canonical: "/about/", markdown: "/about.md" };

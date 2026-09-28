@@ -1,0 +1,95 @@
+---
+/**
+ * The published talk archive and its result regions.
+ *
+ * Feature: talks-section
+ *
+ * The component renders one of two states from the pure archive projection:
+ *
+ * - the empty archive, which shows only the "no talks are currently published"
+ *   message and no talk information at all;
+ * - the populated archive, which renders every published talk exactly once, in
+ *   the snapshot's newest-first order, as complete static HTML.
+ *
+ * Three message regions support the progressive filter without being required
+ * for the archive to be usable:
+ *
+ * - a visible result message, whose static value already describes the initial
+ *   `All talks` selection, so it stays accurate with no JavaScript;
+ * - an initially hidden no-match region. The controller writes the selected
+ *   display label into it as text, never as HTML;
+ * - a polite status region that is empty on load, so nothing is announced until
+ *   a visitor changes the selection.
+ *
+ * The regions are addressed by data attributes rather than by author text.
+ * Styling must not override `[hidden]`, which is what keeps the no-match region
+ * out of the initial rendering.
+ */
+
+import { formatResultMessage } from "../lib/talks/projection";
+import type { TalkArchiveView } from "../lib/talks/projection";
+import TalkCard from "./TalkCard.astro";
+
+interface Props {
+  archive: TalkArchiveView;
+}
+
+const { archive } = Astro.props;
+
+/**
+ * Initial result copy for the `All talks` selection. Every published talk is
+ * presented on load, so the match count equals the total count.
+ */
+const resultMessage = formatResultMessage(
+  archive.allTalksOption,
+  archive.cards.length,
+  archive.cards.length,
+);
+---
+
+<section class="talk-archive" aria-label="Published talks" data-talks-archive>
+  {
+    archive.isEmpty ? (
+      <p class="talks-empty" data-talks-empty>
+        {archive.emptyMessage}
+      </p>
+    ) : (
+      <Fragment>
+        <p class="talks-result" data-talks-result>
+          {resultMessage}
+        </p>
+        <div class="talk-list">
+          {archive.cards.map((card) => (
+            <TalkCard card={card} />
+          ))}
+        </div>
+        <p class="talks-no-match" data-talks-no-match hidden />
+        <p
+          class="talk-status"
+          role="status"
+          aria-live="polite"
+          data-talks-status
+        />
+      </Fragment>
+    )
+  }
+</section>
+
+<style>
+  /*
+   * The polite status region exists for assistive technology only: the visible
+   * result and no-match copy already communicate the same outcome. It is kept
+   * in the accessibility tree rather than removed with `display: none`.
+   */
+  .talk-status {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    white-space: nowrap;
+    clip-path: inset(50%);
+  }
+</style>

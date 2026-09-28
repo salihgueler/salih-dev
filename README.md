@@ -23,17 +23,18 @@ process with `npm run astro -- dev status`, `npm run astro -- dev logs`, and
 
 ## Commands
 
-| Command | Purpose |
-| --- | --- |
-| `npm run dev` | Start the Astro development server |
-| `npm test` | Run importer and content-processing tests |
-| `npm run check` | Run Astro and TypeScript diagnostics |
-| `npm run build` | Build the static site into `dist/` |
-| `npm run verify:build` | Verify discovery files, post representations, and self-hosted DEV banners |
-| `./redeploy` | Validate, review, deploy, publish, and verify the production site |
-| `npm run preview` | Preview the production build locally |
-| `npm run import:dev` | Synchronize reviewed DEV posts and banners |
-| `npm run import:medium` | Import reviewed Medium posts |
+| Command                     | Purpose                                                                   |
+| --------------------------- | ------------------------------------------------------------------------- |
+| `npm run dev`               | Start the Astro development server                                        |
+| `npm test`                  | Run importer and content-processing tests                                 |
+| `npm run check`             | Run Astro and TypeScript diagnostics                                      |
+| `npm run build`             | Build the static site into `dist/`                                        |
+| `npm run verify:build`      | Verify discovery files, post representations, and self-hosted DEV banners |
+| `./redeploy`                | Validate, review, deploy, publish, and verify the production site         |
+| `npm run preview`           | Preview the production build locally                                      |
+| `npm run import:dev`        | Synchronize reviewed DEV posts and banners                                |
+| `npm run import:medium`     | Import reviewed Medium posts                                              |
+| `npm run materialize:talks` | Rebuild generated API talk sources from local record/deck caches          |
 
 Infrastructure commands run from `infra/`:
 
@@ -49,6 +50,61 @@ Blog posts live in `src/content/blog/` and are validated by
 `src/content.config.ts`. Set `draft: true` to exclude a post from the website,
 RSS feed, and machine-readable indexes. Permanent identity, biography, social
 links, and map presentation live in `src/config/site.ts`.
+
+Talks have two authoring sources that converge before validation. Repository-authored
+Markdown records live under `src/content/talks/` with PDFs under
+`public/talks/slides/`; they are changed only through Git. API-authored records
+and approved decks live under `talks/records/` and `talks/decks/` in the retained
+content bucket. The publisher synchronizes those objects to separate local
+caches and runs `npm run materialize:talks`, which clears and recreates only the
+gitignored `src/content/talks/api/` and `public/talks/slides/api/` namespaces.
+Records without an approved deck and unreferenced decks are excluded, while
+repository-authored files are never modified.
+
+Both sources use the strict `talks` schema in `src/content.config.ts` and the
+shared validators in `src/lib/talks/`. Each record requires `title`, `eventName`,
+a quoted `date` in `YYYY-MM-DD` form, `location`, an absolute HTTPS `eventUrl`,
+1 to 10 unique `eventTypes` labels, and `slides`. `videoUrl` is optional and must
+be a supported YouTube source URL (`youtube.com/watch?v=ID` or `youtu.be/ID`);
+`sourceCodeUrl` is optional and must be a credential-free absolute HTTPS URL on
+`github.com` (the `www.github.com` alias normalizes to it) with a non-empty
+repository path, so deceptive suffix hosts and non-GitHub links are rejected;
+`draft: true` excludes a talk from the website and every machine-readable
+representation. Unknown fields are rejected. Repository slide paths use
+`/talks/slides/<file>.pdf`; API paths are code-derived beneath
+`/talks/slides/api/`.
+
+The talk API exposes exactly four `AWS_IAM` routes for starting an upload,
+completing server-side PDF validation, listing API records/versions, and
+conditionally removing a record. It reuses the exact Root_Editor ARN allowlist
+and temporary `aws login` credentials of the content API, and adds no public
+upload UI, hosted login, alternate editor, or long-lived root key. Detailed
+signed-request, replacement, removal, failure-recovery, and storage procedures
+are in `DEPLOY.md`.
+
+Build validation rejects invalid metadata, unsafe or escaping slide paths,
+missing/empty/non-PDF/malformed/encrypted/zero-page documents, and duplicate
+canonical identities or slide paths. All Git/API records resolve through one
+validated snapshot for `/talks/`, `/talks/index.md`, `/sitemap.xml`, `/llms.txt`,
+and `/llms-full.txt`. If sources conflict, repository content is authoritative
+and the API record must be removed or replaced. A failed build leaves stored API
+state unchanged and preserves the previously published site. The collection is
+intentionally empty until the Author supplies a talk through one of these two
+workflows.
+
+For local API materialization, place stored record JSON and approved PDF files
+in separate cache directories, then run:
+
+```sh
+TALK_RECORD_CACHE_PATH=<record-cache> \
+TALK_DECK_CACHE_PATH=<deck-cache> \
+npm run materialize:talks
+```
+
+The command reads the caches without modifying them. After any talk, slide, or
+materialization change, run `npm test`, `npm run check`, `npm run build`, and
+`npm run verify:build`. Infrastructure changes additionally require `npm run
+build`, `npm test`, and `npm run synth` from `infra/`.
 
 Current location and conference events use the versioned schema in
 `src/config/site-content-schema.ts`. Local builds use
