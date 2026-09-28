@@ -651,6 +651,17 @@ button:focus-visible {
   gap: 12px;
 }
 
+/*
+ * The topical-tag group sits below the event-type group with a hairline rule
+ * and its own accessible label, so the two filter axes are visually and
+ * programmatically separate rather than one merged control.
+ */
+.talk-filter-group-topics {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: var(--rule);
+}
+
 .talk-filter-option {
   position: relative;
   padding: 8px 14px;
@@ -787,6 +798,29 @@ button:focus-visible {
 .talk-tag {
   padding: 3px 8px;
   border: var(--rule);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+/*
+ * Topical tags share the event-type tag footprint so both classification axes
+ * read as one visual family in the incumbent paper/ink/mono system. A left
+ * accent keyline is the only differentiator, so a topic reads as distinct from
+ * an event type by shape rather than by a second display face or color alone.
+ */
+.talk-topic-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.talk-topic-tag {
+  padding: 3px 8px 3px 7px;
+  border: var(--rule);
+  border-left: 2px solid var(--accent);
   font-size: 0.72rem;
   line-height: 1.35;
 }

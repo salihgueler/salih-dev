@@ -62,7 +62,11 @@ const REQUIRED_FRONTMATTER_FIELDS = [
   "draft",
 ] as const;
 
-const OPTIONAL_FRONTMATTER_FIELDS = ["videoUrl", "sourceCodeUrl"] as const;
+const OPTIONAL_FRONTMATTER_FIELDS = [
+  "tags",
+  "videoUrl",
+  "sourceCodeUrl",
+] as const;
 
 const CANONICAL_TIMESTAMP_PATTERN =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
@@ -121,14 +125,28 @@ function normalizedFrontmatter(talk: NormalizedTalk): TalkFrontmatter {
     eventTypes: Object.freeze(
       talk.eventTypes.map((eventType) => eventType.label),
     ),
+  };
+
+  // Topical tags sit directly after eventTypes and are omitted when empty, so
+  // an existing record without any topical tags produces byte-identical JSON.
+  const withTags =
+    talk.tags.length === 0
+      ? required
+      : {
+          ...required,
+          tags: Object.freeze(talk.tags.map((tag) => tag.label)),
+        };
+
+  const withSlides = {
+    ...withTags,
     slides: talk.slidePath,
     draft: talk.draft,
   };
 
   const withVideo =
     talk.video === null
-      ? required
-      : { ...required, videoUrl: talk.video.sourceUrl };
+      ? withSlides
+      : { ...withSlides, videoUrl: talk.video.sourceUrl };
 
   return Object.freeze(
     talk.sourceCodeUrl === null
@@ -157,6 +175,22 @@ function frontmatterEquals(
     return false;
   }
 
+  // Topical tags are canonical only when they match the normalized form. The
+  // canonical record omits an empty list, so a stored `tags` present alongside
+  // an absent canonical value (or vice versa) is a mismatch, and a present
+  // pair must be identical element for element in order.
+  if (right.tags === undefined) {
+    if (Object.hasOwn(left, "tags")) return false;
+  } else {
+    if (
+      !isUnknownArray(left.tags) ||
+      left.tags.length !== right.tags.length ||
+      !left.tags.every((tag, index) => tag === right.tags?.[index])
+    ) {
+      return false;
+    }
+  }
+
   return left.eventTypes.every(
     (eventType, index) => eventType === right.eventTypes[index],
   );
@@ -169,6 +203,7 @@ function isRoundTripSafeFrontmatter(frontmatter: TalkFrontmatter): boolean {
     frontmatter.location,
     frontmatter.eventUrl,
     ...frontmatter.eventTypes,
+    ...(frontmatter.tags === undefined ? [] : frontmatter.tags),
     ...(frontmatter.videoUrl === undefined ? [] : [frontmatter.videoUrl]),
     ...(frontmatter.sourceCodeUrl === undefined
       ? []
@@ -186,14 +221,23 @@ function freezeFrontmatter(frontmatter: TalkFrontmatter): TalkFrontmatter {
     location: frontmatter.location,
     eventUrl: frontmatter.eventUrl,
     eventTypes: Object.freeze([...frontmatter.eventTypes]),
+  };
+
+  const withTags =
+    frontmatter.tags === undefined
+      ? required
+      : { ...required, tags: Object.freeze([...frontmatter.tags]) };
+
+  const withSlides = {
+    ...withTags,
     slides: frontmatter.slides,
     draft: frontmatter.draft,
   };
 
   const withVideo =
     frontmatter.videoUrl === undefined
-      ? required
-      : { ...required, videoUrl: frontmatter.videoUrl };
+      ? withSlides
+      : { ...withSlides, videoUrl: frontmatter.videoUrl };
 
   return Object.freeze(
     frontmatter.sourceCodeUrl === undefined
@@ -314,6 +358,9 @@ export function toTalkFrontmatterDocument(record: ApiTalkRecord): string {
     `eventUrl: ${quoted(frontmatter.eventUrl)}`,
     "eventTypes:",
     ...frontmatter.eventTypes.map((eventType) => `  - ${quoted(eventType)}`),
+    ...(frontmatter.tags === undefined
+      ? []
+      : ["tags:", ...frontmatter.tags.map((tag) => `  - ${quoted(tag)}`)]),
     `slides: ${quoted(frontmatter.slides)}`,
   ];
 

@@ -29,6 +29,9 @@ export const ALL_TALKS_FILTER_LABEL = "All talks";
 /** Prefix of every generated event-type identifier. */
 export const EVENT_TYPE_ID_PREFIX = "event-type-";
 
+/** Prefix of every generated topical-tag identifier. */
+export const TOPIC_TAG_ID_PREFIX = "topic-tag-";
+
 /** Copy shown when the published collection contains no talks. */
 export const TALKS_EMPTY_MESSAGE = "No talks are currently published.";
 
@@ -64,6 +67,17 @@ export function eventTypeOptionId(index: number): string {
   }
 
   return `${EVENT_TYPE_ID_PREFIX}${index}`;
+}
+
+/** Builds the generated identifier for the topical-tag option at `index`. */
+export function topicTagOptionId(index: number): string {
+  if (!Number.isInteger(index) || index < 0) {
+    throw new Error(
+      `Topical-tag option index must be a non-negative integer: ${String(index)}`,
+    );
+  }
+
+  return `${TOPIC_TAG_ID_PREFIX}${index}`;
 }
 
 /** Copy naming the selected event type that produced no matches. */

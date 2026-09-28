@@ -64,7 +64,10 @@ repository-authored files are never modified.
 Both sources use the strict `talks` schema in `src/content.config.ts` and the
 shared validators in `src/lib/talks/`. Each record requires `title`, `eventName`,
 a quoted `date` in `YYYY-MM-DD` form, `location`, an absolute HTTPS `eventUrl`,
-1 to 10 unique `eventTypes` labels, and `slides`. `videoUrl` is optional and must
+1 to 10 unique `eventTypes` labels, and `slides`. `tags` is optional and, when
+present, is a list of up to 20 unique topical labels of 1 to 50 Unicode code
+points each; it classifies a talk by subject and is kept entirely separate from
+`eventTypes`, which classifies event format. `videoUrl` is optional and must
 be a supported YouTube source URL (`youtube.com/watch?v=ID` or `youtu.be/ID`);
 `sourceCodeUrl` is optional and must be a credential-free absolute HTTPS URL on
 `github.com` (the `www.github.com` alias normalizes to it) with a non-empty

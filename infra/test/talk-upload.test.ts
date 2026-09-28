@@ -272,10 +272,11 @@ function storedRecord(
 function stagedBody(
   options: Readonly<{
     replaces?: Readonly<{ recordKey: string; version: string }>;
+    metadata?: Readonly<Record<string, unknown>>;
   }> = {},
 ): string {
   return JSON.stringify({
-    metadata,
+    metadata: options.metadata ?? metadata,
     ...(options.replaces === undefined ? {} : { replaces: options.replaces }),
   });
 }
@@ -731,6 +732,49 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
         `delete:${stagedKey(DECK_ID)}`,
         "build",
       ]);
+    },
+  );
+
+  await t.test(
+    "persists supplied topical tags into the stored record",
+    async () => {
+      const bytes = fixtures().multiPage;
+      const taggedMetadata = { ...metadata, tags: ["Serverless", "GraphQL"] };
+      const expectedRecordKey = deriveTalkRecordKey(
+        deriveTalkIdentity(metadata.date, metadata.title),
+      );
+      let storedBody = "";
+
+      s3Send = async (command) => {
+        if (command instanceof GetObjectCommand) {
+          return command.input.Key === stagedKey(DECK_ID)
+            ? { Body: stringBody(stagedBody({ metadata: taggedMetadata })) }
+            : pendingObject(bytes);
+        }
+        if (command instanceof HeadObjectCommand) {
+          if (command.input.Key === pendingKey(DECK_ID))
+            return pendingHead(bytes);
+          throw s3Error(404);
+        }
+        if (command instanceof CopyObjectCommand) {
+          return { VersionId: "approved-storage-version" };
+        }
+        if (command instanceof PutObjectCommand) {
+          storedBody = String(command.input.Body);
+          return { ETag: '"tagged-record-version"' };
+        }
+        if (command instanceof DeleteObjectCommand) return {};
+        throw new Error(`Unexpected S3 command: ${commandName(command)}`);
+      };
+      codeBuildSend = async () => ({ build: { id: "build-tagged" } });
+
+      const response = await invokeCompletion(completionEvent({ body: "{}" }));
+      assert.equal(response.statusCode, 202);
+
+      const parsed = parseApiTalkRecord(JSON.parse(storedBody) as unknown);
+      assert.notEqual(parsed, null);
+      assert.deepEqual(parsed?.frontmatter.tags, ["Serverless", "GraphQL"]);
+      assert.equal(parsed?.recordKey, expectedRecordKey);
     },
   );
 
