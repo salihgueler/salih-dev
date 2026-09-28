@@ -439,6 +439,31 @@ test("packages the pinned PDF parser only with upload completion", () => {
   );
 });
 
+test("bundles upload completion as ESM so the PDF parser loads through import", () => {
+  const { app, delivery } = createStacks();
+  const assemblyDirectory = app.synth().directory;
+  const fn = findResource(
+    delivery,
+    "AWS::Lambda::Function",
+    "/ContentApi/TalkUploadCompleteFunction/Resource",
+  );
+  const code = asRecord(fn.Properties.Code, "completion code");
+  assert.equal(typeof code.S3Key, "string");
+  const assetDirectory = path.join(
+    assemblyDirectory,
+    `asset.${(code.S3Key as string).replace(/\.zip$/u, "")}`,
+  );
+
+  // pdfjs-dist ships only ES modules. The Lambda runtime rejects require() of
+  // an ES module (ERR_REQUIRE_ESM), so the handler must be an ESM bundle.
+  const entry = path.join(assetDirectory, "index.mjs");
+  assert.equal(existsSync(entry), true, "completion bundle must be index.mjs");
+  assert.equal(existsSync(path.join(assetDirectory, "index.js")), false);
+  const source = readFileSync(entry, "utf8");
+  assert.doesNotMatch(source, /require\(\s*["']pdfjs-dist/u);
+  assert.match(source, /from\s*["']pdfjs-dist\/legacy\/build\/pdf\.mjs["']/u);
+});
+
 test("grants each talk handler only its task-scoped actions and prefixes", () => {
   const { delivery } = createStacks();
   const start = policyStatements(

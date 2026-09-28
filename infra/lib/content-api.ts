@@ -7,7 +7,7 @@ import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations
 import * as codebuild from "aws-cdk-lib/aws-codebuild";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
-import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import { NodejsFunction, OutputFormat } from "aws-cdk-lib/aws-lambda-nodejs";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
@@ -109,6 +109,15 @@ export class ContentApi extends Construct {
       {
         architecture: lambda.Architecture.ARM_64,
         bundling: {
+          // pdfjs-dist is ESM-only; a CommonJS bundle turns its import into
+          // require(), which the Lambda runtime rejects with ERR_REQUIRE_ESM.
+          // ESM resolution also ignores NODE_PATH, so the pinned AWS SDK is
+          // bundled instead of resolved from the runtime-provided copy.
+          banner:
+            "import { createRequire as __kcCreateRequire } from 'node:module'; const require = __kcCreateRequire(import.meta.url);",
+          bundleAwsSDK: true,
+          format: OutputFormat.ESM,
+          mainFields: ["module", "main"],
           minify: true,
           nodeModules: ["pdfjs-dist"],
           target: "node24",
