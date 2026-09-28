@@ -5,6 +5,8 @@ infra/cdk.out/
 .astro/
 .cache/
 public/images/blog/
+src/content/talks/api/
+public/talks/slides/api/
 
 # dependencies
 node_modules/

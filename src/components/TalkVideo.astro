@@ -1,0 +1,213 @@
+---
+/**
+ * Privacy-enhanced click-to-load talk video.
+ *
+ * Feature: talks-section
+ *
+ * The component receives only a already-normalized video value and the talk
+ * title. It never sees, parses, or reconstructs author text: the embed URL is
+ * the code-owned `youtube-nocookie.com` value derived during validation, and the
+ * fallback link uses the validated original HTTPS source URL.
+ *
+ * Before activation the markup is a local 16:9 placeholder containing exactly
+ * one native play button and one normal link to the original source. There is no
+ * remote thumbnail, no poster image, and no iframe, so the provider receives no
+ * request until a visitor asks for playback.
+ *
+ * On Enter, Space, or pointer activation the module script replaces only the
+ * play button with exactly one iframe inside the same media region. Every iframe
+ * attribute is code-owned; a source record cannot contribute an attribute, a
+ * host, a path, or a query parameter. The autoplay parameter is part of the
+ * derived embed URL, so playback only ever begins after visitor intent.
+ *
+ * Nothing outside the media control is touched. The talk title, metadata, event
+ * link, PDF slides action, and the fallback video link all remain rendered and
+ * keyboard-operable, so a blocked provider, a failed request, or a failed script
+ * cannot make the rest of the entry inaccessible. Activation stays on the page:
+ * the script performs no navigation, and the fallback link is a normal link
+ * rather than the required inline playback path.
+ *
+ * The whole component is only composed into an entry whose talk has a video, so
+ * a talk without one renders no media region and no empty player at all.
+ */
+
+import type { NormalizedVideo, TalkVideoProvider } from "../lib/talks/model";
+
+interface Props {
+  video: NormalizedVideo;
+  talkTitle: string;
+}
+
+const { video, talkTitle } = Astro.props;
+
+/** Display names of the supported providers, used for the fallback link copy. */
+const PROVIDER_LABELS: Record<TalkVideoProvider, string> = {
+  youtube: "YouTube",
+};
+
+const providerLabel = PROVIDER_LABELS[video.provider];
+
+/**
+ * Player labels. Both include the talk title so the media control and the
+ * embedded player are identifiable out of context. The title stays visible
+ * exactly once in the entry heading: these are accessible names and an iframe
+ * title, not additional visible copy.
+ */
+const playLabel = `Play video for ${talkTitle}`;
+const iframeTitle = `${talkTitle} video`;
+const fallbackLabel = `Watch ${talkTitle} on ${providerLabel}`;
+---
+
+<div
+  class="talk-video"
+  data-talk-video
+  data-talk-video-embed-url={video.embedUrl}
+  data-talk-video-iframe-title={iframeTitle}
+>
+  <div class="talk-video-frame" data-talk-video-frame>
+    <button
+      type="button"
+      class="talk-video-play"
+      data-talk-video-play
+      aria-label={playLabel}
+    >
+      <span class="talk-video-play-glyph" aria-hidden="true">&#9654;</span>
+      <span class="talk-video-play-text">Play video</span>
+    </button>
+  </div>
+  <p class="talk-video-fallback">
+    <a href={video.sourceUrl} aria-label={fallbackLabel}>
+      Watch on {providerLabel}
+    </a>
+  </p>
+</div>
+
+<style>
+  /*
+   * Structural media styling only. The archive's visual treatment lives with the
+   * page styles; what matters here is that the region keeps a 16:9 ratio, never
+   * exceeds its column, and that the replacement iframe fills the same box the
+   * placeholder occupied.
+   */
+  .talk-video {
+    min-width: 0;
+    margin: 18px 0 0;
+  }
+
+  .talk-video-frame {
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border: var(--rule);
+    background: var(--ink);
+  }
+
+  .talk-video-play {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    padding: 12px;
+    border: 0;
+    color: var(--paper);
+    background: transparent;
+    font: inherit;
+    font-size: 0.9rem;
+    text-align: center;
+    cursor: pointer;
+  }
+
+  .talk-video-play:hover .talk-video-play-glyph {
+    color: var(--accent);
+  }
+
+  .talk-video-play-glyph {
+    font-size: 2.2rem;
+    line-height: 1;
+  }
+
+  .talk-video-play-text {
+    overflow-wrap: anywhere;
+  }
+
+  /*
+   * The iframe is created by the module script, so it never carries this
+   * component's scope class and has to be addressed globally within the frame.
+   */
+  .talk-video-frame :global(.talk-video-iframe) {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+  }
+
+  .talk-video-fallback {
+    margin: 10px 0 0;
+    overflow-wrap: anywhere;
+    font-size: 0.82rem;
+  }
+</style>
+
+<script>
+  /*
+   * Click-to-load activation.
+   *
+   * The script only ever swaps the play button for one iframe inside the same
+   * media region. It reads the code-owned embed URL and iframe title from data
+   * attributes, sets every iframe attribute itself, keeps the visitor on the
+   * page, and performs no navigation, storage, cookie, analytics, or other
+   * network operation. If it never runs, the placeholder and the fallback link
+   * remain fully usable.
+   */
+  const IFRAME_ALLOW = "autoplay; encrypted-media; picture-in-picture; web-share";
+
+  function activate(
+    frame: HTMLElement,
+    button: HTMLButtonElement,
+    embedUrl: string,
+    iframeTitle: string,
+  ): void {
+    if (!button.isConnected) return;
+    if (frame.querySelector("iframe") !== null) return;
+
+    const iframe = document.createElement("iframe");
+    iframe.className = "talk-video-iframe";
+    iframe.setAttribute("src", embedUrl);
+    iframe.setAttribute("title", iframeTitle);
+    iframe.setAttribute("loading", "lazy");
+    iframe.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+    iframe.setAttribute("allow", IFRAME_ALLOW);
+    iframe.setAttribute("allowfullscreen", "");
+
+    button.replaceWith(iframe);
+    iframe.focus();
+  }
+
+  for (const player of document.querySelectorAll<HTMLElement>(
+    "[data-talk-video]",
+  )) {
+    const frame = player.querySelector<HTMLElement>("[data-talk-video-frame]");
+    const button = player.querySelector<HTMLButtonElement>(
+      "[data-talk-video-play]",
+    );
+    const embedUrl = player.dataset.talkVideoEmbedUrl;
+    const iframeTitle = player.dataset.talkVideoIframeTitle;
+
+    if (
+      frame === null ||
+      button === null ||
+      embedUrl === undefined ||
+      iframeTitle === undefined
+    ) {
+      continue;
+    }
+
+    button.addEventListener("click", () => {
+      activate(frame, button, embedUrl, iframeTitle);
+    });
+  }
+</script>

@@ -1,0 +1,387 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Add exact-pinned build-time validation and property-test dependencies": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550068218
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550078122
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550359059
+      }
+    ],
+    "1.2 Extend `src/content.config.ts` with the strict file-backed `talks` collection": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550068373
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550906424
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789551411950
+      }
+    ],
+    "1.3 Create the typed Talks domain model and pure metadata validators": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550068481
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550363945
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550901435
+      }
+    ],
+    "2.1 Implement safe slide resolution and parser-backed PDF validation": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550068553
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550910909
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789551416269
+      }
+    ],
+    "2.2 Implement the validated and published Talks gateways": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550068648
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789551420934
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789551727149
+      }
+    ],
+    "2.3 Implement pure archive, filter, date, and projection helpers": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550068722
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789551745129
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789551959691
+      }
+    ],
+    "3. Checkpoint - Ensure all tests pass": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550068810
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789551964380
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789552053603
+      }
+    ],
+    "4.1 Extend the shared title and primary-navigation contracts": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550068890
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789552058165
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789552480503
+      }
+    ],
+    "4.2 Create static Talk card, archive, and filter components": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550068955
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789552063765
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789552484284
+      }
+    ],
+    "4.3 Implement progressive one-hot client filtering": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550069021
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789552815516
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789553146143
+      }
+    ],
+    "4.5 Implement privacy-enhanced click-to-load talk video": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550069101
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789552497275
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789552805583
+      }
+    ],
+    "4.6 Create `/talks/` and its responsive visual treatment": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550069185
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789553155073
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789557982120
+      }
+    ],
+    "5.1 Implement the Talks Markdown serializer and alternate route": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550069250
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789552069137
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789552488252
+      }
+    ],
+    "5.4 Add Talks to sitemap and LLM-oriented discovery routes": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550069320
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789552821320
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789553150488
+      }
+    ],
+    "5.5 Extend application Markdown discovery and negotiation mappings": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550069405
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789552501234
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789552809493
+      }
+    ],
+    "6.1 Extend `scripts/verify-static-build.mjs` with Talks invariants": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550069472
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789558766424
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789559469481
+      }
+    ],
+    "6.2 Provide verification content without inventing public claims": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550069538
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789558505440
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789558759351
+      }
+    ],
+    "6.3 Update only existing relevant project documentation": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550069604
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789558770633
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789559473484
+      }
+    ],
+    "7.1 Add Talks to CloudFront request and response mappings": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550069672
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789552073430
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789552492224
+      }
+    ],
+    "8. Final checkpoint - Ensure all application and infrastructure validation passes": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789550069741
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789559478263
+      },
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789559749255
+      }
+    ],
+    "1. Establish the TypeScript content contract and test tooling": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789551412063
+      }
+    ],
+    "2. Implement PDF validation, publication, and derived projections": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789551959814
+      }
+    ],
+    "7. Extend CloudFront Talks representation handling": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789552492318
+      }
+    ],
+    "5. Generate Markdown and discovery outputs from the validated snapshot": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789553150598
+      }
+    ],
+    "4. Build the accessible, responsive Astro Talks experience": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789557982278
+      }
+    ],
+    "6. Complete application build verification and existing documentation": [
+      {
+        "executionId": "26c8a964-30dc-447c-8957-00e67b4b7d3a",
+        "chatSessionId": "sess_4e9a18cd-66ca-4821-af89-3be8b153c4c8",
+        "timestamp": 1789559473586
+      }
+    ]
+  }
+}

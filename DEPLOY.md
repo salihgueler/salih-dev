@@ -115,6 +115,9 @@ curl -fsSI https://salih.dev/
 curl -fsSI -H 'Accept: text/markdown' https://salih.dev/
 curl -fsS -H 'Accept: text/markdown' https://salih.dev/about/ \
   | diff - <(curl -fsS https://salih.dev/about.md)
+curl -fsSI https://salih.dev/talks/
+curl -fsS -H 'Accept: text/markdown' https://salih.dev/talks/ \
+  | diff - <(curl -fsS https://salih.dev/talks/index.md)
 curl -fsSI https://salih.dev/llms.txt
 curl -fsSI https://salih.dev/llms-full.txt
 curl -fsSI https://salih.dev/api/catalog.json
@@ -280,3 +283,213 @@ A successful PUT returns HTTP 202 with the new S3 version and CodeBuild build
 ID. Invalid content returns HTTP 400 before storage; unsigned callers, other IAM
 identities, and mismatched caller ARNs receive HTTP 403. Restore an earlier S3
 version of `site/content.v1.json` and publish again to roll back.
+
+## 10. Manage API-authored talks
+
+The talk capability has no public page, upload form, hosted login, or additional
+editor identity. These four routes extend the same `AWS_IAM` HTTP API and exact
+root-ARN allowlist used by `/v1/content`:
+
+| Method and route                             | Purpose                                                                             |
+| -------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `POST /v1/talks/uploads`                     | Validate an optional talk record, stage the request, and issue one PDF upload grant |
+| `POST /v1/talks/uploads/{deckId}/completion` | Validate the transferred PDF, store approved state, and start publication           |
+| `GET /v1/talks/records`                      | List API-authored records and their current ETag versions; never return deck bytes  |
+| `DELETE /v1/talks/records/{recordKey}`       | Conditionally remove one API-authored record and its approved deck                  |
+
+Use only the temporary Root_Editor credentials established with `aws login` in
+section 9. Never create a root access key. Set `SITE_CONTENT_API` and export the
+temporary credentials as shown there; all requests below must use `--aws-sigv4`,
+the temporary access key and secret, and `x-amz-security-token`. Unsigned,
+expired, or non-allowlisted requests are rejected before storage work.
+
+### Start and transfer an upload
+
+The start body is a closed JSON contract of at most 65,536 UTF-8 bytes. It may be
+`{}` for a deck-only upload or contain `metadata` with the same validated fields
+as a repository talk except `slides`, which is always code-derived. Caller
+filenames, object keys, slide paths, `slides`, and other unknown members are
+rejected. A complete example is:
+
+```json
+{
+  "metadata": {
+    "title": "Building agent-ready static websites",
+    "eventName": "Example Conference",
+    "date": "2026-06-18",
+    "location": "Berlin, Germany",
+    "eventUrl": "https://conference.example/talks/agent-ready",
+    "eventTypes": ["Conference"],
+    "videoUrl": "https://www.youtube.com/watch?v=abcdefghijk",
+    "sourceCodeUrl": "https://github.com/example/agent-ready-talk",
+    "draft": false
+  }
+}
+```
+
+Save the response so the generated identifiers and upload form fields remain
+paired with this request:
+
+```sh
+curl --fail-with-body \
+  --request POST \
+  --aws-sigv4 "aws:amz:us-east-1:execute-api" \
+  --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY" \
+  --header "x-amz-security-token: $AWS_SESSION_TOKEN" \
+  --header "Content-Type: application/json" \
+  --data-binary @talk-upload.json \
+  --output .cache/talk-upload-grant.json \
+  "$SITE_CONTENT_API/v1/talks/uploads"
+```
+
+A successful `201` contains `deckId`, the pending `storageKey`, the approved
+storage key, the derived `/talks/slides/api/<deckId>.pdf` path, `expiresAt`, and
+`upload.url` plus `upload.fields`; metadata uploads also contain `recordKey`.
+Submit the PDF directly to `upload.url` as a multipart form using every returned
+field unchanged, then append a multipart `file` part. The policy permits exactly
+one code-derived pending key, requires `Content-Type: application/pdf`, accepts
+1 through 26,214,400 bytes inclusive, and expires no later than 900 seconds
+after issue. It grants no read, list, or delete access.
+
+Build the multipart arguments from the returned field object and use every
+field unchanged:
+
+```sh
+UPLOAD_URL="$(jq -r .upload.url .cache/talk-upload-grant.json)"
+UPLOAD_ARGS=()
+while IFS= read -r field; do
+  UPLOAD_ARGS+=(--form "$field")
+done < <(jq -r '.upload.fields | to_entries[] | "\(.key)=\(.value)"' \
+  .cache/talk-upload-grant.json)
+
+curl --fail-with-body \
+  "${UPLOAD_ARGS[@]}" \
+  --form 'file=@slides.pdf;type=application/pdf' \
+  "$UPLOAD_URL"
+```
+
+Do not invent, remove, or change a returned field.
+
+### Complete and publish
+
+After S3 accepts the form, call completion with no body:
+
+```sh
+DECK_ID="$(jq -r .deckId .cache/talk-upload-grant.json)"
+curl --fail-with-body \
+  --request POST \
+  --aws-sigv4 "aws:amz:us-east-1:execute-api" \
+  --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY" \
+  --header "x-amz-security-token: $AWS_SESSION_TOKEN" \
+  "$SITE_CONTENT_API/v1/talks/uploads/$DECK_ID/completion"
+```
+
+Completion re-reads the pending object and requires its recorded media type and
+size to match, the `%PDF-` signature to be present, every page to parse with the
+strict pinned parser without a password, and the page count to be positive.
+Only then does it copy the approved deck, conditionally store the API record,
+remove pending state, and start exactly one publisher build. A successful `202`
+returns `status: publishing`, validated byte/page counts, `buildId`, and, for a
+metadata upload, `recordKey`, `recordVersion`, and the same ETag in the response
+header.
+
+Treat errors according to state:
+
+- `404 pending_deck_not_found`: the transfer is absent or expired; start a new
+  upload rather than retrying completion.
+- `422 deck_validation_failed`: the response names the failed PDF criterion; no
+  approved record is written. Correct the PDF and start a new upload.
+- `409 talk_identity_conflict`, `412 record_changed`, or `428
+precondition_required`: refresh the record list and restart with the current
+  precondition; rejected requests do not overwrite the current record.
+- `500`: an unexpected parser, storage, or cleanup failure is fail-closed.
+  Inspect the one-month Lambda logs and refresh the record list to establish
+  durable state. If the intended record is absent, retry completion with the
+  same `deckId`; pending state is retained on validation/store failure and the
+  conditional record write prevents replacing a newer version. If the record is
+  present or retry returns `pending_deck_not_found`, do not start another upload
+  blindly—publication or cleanup may be the only remaining operation.
+- `503 publication_not_started`: the response identifies state that was already
+  stored. Do not repeat completion. Start the publisher manually with the
+  returned/stored identifiers, or allow the next scheduled publication to use
+  that state.
+
+A publisher validation failure leaves the stored API record unchanged and the
+previously published site live. Fix it through a conditional replacement or
+removal, then publish again; do not bypass or weaken validation.
+
+### Replace or remove a record
+
+List records immediately before a mutation and use the returned strong ETag from
+`recordVersion` (also exposed as `etag`):
+
+```sh
+curl --fail-with-body \
+  --aws-sigv4 "aws:amz:us-east-1:execute-api" \
+  --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY" \
+  --header "x-amz-security-token: $AWS_SESSION_TOKEN" \
+  --output .cache/talk-records.json \
+  "$SITE_CONTENT_API/v1/talks/records"
+```
+
+To replace a deck and optionally its metadata, start a new upload with
+`replaces.recordKey` and the exact quoted `replaces.version`. Omitting `metadata`
+preserves the current validated metadata and associates it with the new deck.
+Supplying metadata may not change the canonical identity derived from date and
+title. Missing, malformed, or stale versions return `428`, `400`, or `412`; an
+absent target returns `404`. On success, complete the new deck normally and keep
+the new ETag returned by completion.
+
+To remove an API-authored record, send both its current ETag and explicit intent:
+
+```sh
+RECORD_KEY="<recordKey>"
+RECORD_ETAG='"<etag>"'
+curl --fail-with-body \
+  --request DELETE \
+  --aws-sigv4 "aws:amz:us-east-1:execute-api" \
+  --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY" \
+  --header "x-amz-security-token: $AWS_SESSION_TOKEN" \
+  --header "If-Match: $RECORD_ETAG" \
+  --header "x-talk-removal: confirmed" \
+  "$SITE_CONTENT_API/v1/talks/records/$RECORD_KEY"
+```
+
+Removal deletes the current API record and its associated approved deck, then
+starts exactly one build; an already-absent deck is tolerated. Missing intent or
+precondition returns `428`, a malformed value returns `400`, a stale ETag
+returns `412`, and a missing record returns `404`. Repository-authored talks
+cannot be removed through this API and return `409 repository_authored_talk`.
+When repository and API records conflict by canonical identity or slide path,
+the build fails with both sources named; the repository record is authoritative,
+so remove the API record rather than changing repository content through the
+API.
+
+### Storage, publication, and logs
+
+Approved API records and decks live under `talks/records/` and `talks/decks/` in
+the existing private, TLS-only, SSE-S3 encrypted, versioned, retained content
+bucket. Abandoned staged requests and deck bytes under `talks/pending/` expire
+after one day. The publisher synchronizes records and decks into separate local
+caches with deletion enabled, then `npm run materialize:talks` clears and
+recreates only `src/content/talks/api/` and `public/talks/slides/api/`. Records
+without an available approved deck and unreferenced decks do not enter the
+snapshot. The caches and retained store are read-only to materialization, while
+Git-authored records and tracked slides remain unchanged.
+
+After materialization the publisher runs DEV import, tests, Astro/type checks,
+the static build, and strict build verification. Only a successful gate may sync
+`dist/` to the website bucket and invalidate CloudFront. The Talks HTML,
+Markdown alternate, sitemap, and LLM indexes continue to come from one validated
+snapshot.
+
+Authorization, deck-validation, and store-change logs are retained for one
+month and contain only their action-specific request ID, caller authorization,
+derived storage key, byte/page facts, stored version, and build ID fields. They
+exclude request/PDF/rendered content, IP and forwarded IP, cookies, query
+strings, user agents, referrers, and browser or device identifiers.
+
+Creating or updating this infrastructure is billable and requires separate
+explicit approval. Local implementation and validation must not deploy or diff
+CDK, invoke the production content API, transfer/delete S3 objects, start
+CodeBuild, or change DNS or nameservers.

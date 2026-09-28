@@ -2,7 +2,20 @@
 import { navigation, site } from "../config/site";
 import SocialLinks from "./SocialLinks.astro";
 
-const pathname = Astro.url.pathname;
+const normalizeRoute = (value: string): string => {
+  const trimmed = value.replace(/\/+$/u, "");
+  return trimmed === "" ? "/" : trimmed;
+};
+
+const currentRoute = normalizeRoute(Astro.url.pathname);
+
+const isCurrentRoute = (href: string): boolean => {
+  const target = normalizeRoute(href);
+  if (target === "/") {
+    return currentRoute === "/";
+  }
+  return currentRoute === target || currentRoute.startsWith(`${target}/`);
+};
 ---
 
 <header class="site-header">
@@ -16,7 +29,7 @@ const pathname = Astro.url.pathname;
             <li>
               <a
                 href={item.href}
-                aria-current={pathname.startsWith(item.href) ? "page" : undefined}
+                aria-current={isCurrentRoute(item.href) ? "page" : undefined}
               >
                 {item.label}
               </a>

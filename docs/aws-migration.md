@@ -15,9 +15,15 @@ The architecture uses:
   negotiation.
 - AWS Certificate Manager for the `salih.dev` and `www.salih.dev` certificate.
 - Amazon Route 53 for authoritative DNS. Squarespace remains the registrar.
-- A separate, private, versioned S3 bucket for normalized content, copied
-  banners, and synchronization state.
-- AWS CodeBuild with Lambda compute for synchronization and static builds.
+- A separate, private, TLS-only, SSE-S3 encrypted, versioned, retained S3
+  bucket for normalized content, copied banners, synchronization state, and the
+  API-authored talk record/deck store.
+- The existing root-only `AWS_IAM` content API, extended with four talk routes
+  for upload grants, completion, record listing, and conditional removal. It
+  adds no public editor, hosted login, long-lived key, or visitor-facing upload
+  surface.
+- AWS CodeBuild with Lambda compute for synchronization, API talk
+  materialization, validation, and static builds.
 - Amazon EventBridge Scheduler for the daily trigger.
 - Amazon SQS as the scheduler dead-letter queue.
 - CloudWatch and Amazon SNS for build, availability, and error-rate alarms,
@@ -65,9 +71,39 @@ no runtime dependency on DEV.
 - `s3://<site-bucket>/`: generated HTML, Markdown representations, discovery
   documents, CSS, and public banner copies.
 
-After synchronization, CodeBuild runs tests and Astro diagnostics, builds the
-site, updates the website bucket, and invalidates CloudFront. Publication is
-skipped if any validation or build command fails.
+**Talk API storage and publication:** The root-only `AWS_IAM` content API
+accepts an optional validated talk metadata payload and issues a presigned POST
+to `talks/pending/<deckId>.pdf`. The policy pins the code-derived key,
+`application/pdf`, 1 through 26,214,400 bytes, and a maximum 900-second expiry.
+Completion strictly validates content type, size, signature, complete unencrypted
+PDF parsing, and positive page count before copying to `talks/decks/` and
+conditionally writing `talks/records/`. Pending objects expire after one day;
+approved records/decks retain the bucket's private, TLS-only, SSE-S3 encrypted,
+versioned, retained posture and 90-day noncurrent-version expiry.
+
+The four talk routes start uploads, complete validation, list record ETags, and
+conditionally remove API records. Replacement and removal require current strong
+ETags; removal also requires explicit confirmation. The API never edits
+repository records or Git-tracked slides. A Git/API canonical-identity or slide
+collision fails the build with repository content authoritative and the API
+record named for remediation.
+
+**Publisher materialization:** Before validation, CodeBuild synchronizes
+`talks/records/` and `talks/decks/` with deletion enabled into separate caches.
+`npm run materialize:talks` then clears and rebuilds only
+`src/content/talks/api/` and `public/talks/slides/api/`, including exactly records
+whose referenced approved deck exists. It does not write to the retained store,
+mutate Git-authored content, or include pending/orphaned data. CodeBuild next
+runs DEV import, tests, Astro/type checks, static generation, and strict static
+verification. The `CODEBUILD_BUILD_SUCCEEDING` gate prevents every website sync
+and CloudFront invalidation after failure, preserving both stored API state and
+the previously published site. Accepted completion/removal starts one build;
+if that start fails, the API returns `publication_not_started` identifying the
+retained state for a later scheduled or manual build.
+
+After synchronization and materialization, CodeBuild runs tests and Astro
+diagnostics, builds the site, updates the website bucket, and invalidates
+CloudFront. Publication is skipped if any validation or build command fails.
 
 ## Migration sequence
 
@@ -151,20 +187,20 @@ Assumptions: 100,000 viewer requests, 10 GB transfer, 2 GB combined S3
 storage, and 31 daily builds of no more than 180 seconds on Lambda x86 1 GB
 compute. Prices are estimates for `us-east-1` as of August 2026 and exclude tax.
 
-| Service | Likely with ongoing allowances | Conservative paid usage |
-| --- | ---: | ---: |
-| Route 53 hosted zone | $0.50 | $0.50 |
-| Route 53 alias queries to CloudFront | $0.00 | $0.00 |
-| CloudFront transfer and requests | $0.00 | about $0.95 |
-| S3 storage and requests, including 90-day analytics retention | about $0.08 | about $0.08 |
-| CodeBuild Lambda compute, 5,580 seconds | $0.00 | about $0.06 |
-| EventBridge schedules and rules | $0.00 | less than $0.01 |
-| SQS dead-letter queue | $0.00 | less than $0.01 |
-| ACM public certificate | $0.00 | $0.00 |
-| CloudWatch logs, dashboard, alarms, and SNS | about $0.01 | about $3.50 |
-| Scheduled arm64 Lambda homepage check | $0.00 | less than $0.01 |
-| CloudFront standard logs v2, analytics widget Lambda, and reused Athena queries | less than $0.05 | less than $0.05 |
-| **Estimated total** | **about $0.65/month** | **about $5.20/month** |
+| Service                                                                         | Likely with ongoing allowances | Conservative paid usage |
+| ------------------------------------------------------------------------------- | -----------------------------: | ----------------------: |
+| Route 53 hosted zone                                                            |                          $0.50 |                   $0.50 |
+| Route 53 alias queries to CloudFront                                            |                          $0.00 |                   $0.00 |
+| CloudFront transfer and requests                                                |                          $0.00 |             about $0.95 |
+| S3 storage and requests, including 90-day analytics retention                   |                    about $0.08 |             about $0.08 |
+| CodeBuild Lambda compute, 5,580 seconds                                         |                          $0.00 |             about $0.06 |
+| EventBridge schedules and rules                                                 |                          $0.00 |         less than $0.01 |
+| SQS dead-letter queue                                                           |                          $0.00 |         less than $0.01 |
+| ACM public certificate                                                          |                          $0.00 |                   $0.00 |
+| CloudWatch logs, dashboard, alarms, and SNS                                     |                    about $0.01 |             about $3.50 |
+| Scheduled arm64 Lambda homepage check                                           |                          $0.00 |         less than $0.01 |
+| CloudFront standard logs v2, analytics widget Lambda, and reused Athena queries |                less than $0.05 |         less than $0.05 |
+| **Estimated total**                                                             |          **about $0.65/month** |   **about $5.20/month** |
 
 The likely estimate assumes this dashboard remains within CloudWatch's first
 three free custom dashboards and the alarms remain within the first 10 free

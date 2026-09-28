@@ -9,6 +9,11 @@ type StructuredData = Record<string, unknown>;
 
 interface Props {
   title?: string;
+  /**
+   * Exact `<title>` text. When supplied it replaces the site-qualified
+   * document title while social metadata keeps the site-qualified form.
+   */
+  documentTitle?: string;
   description?: string;
   image?: string;
   imageAlt?: string;
@@ -22,6 +27,7 @@ interface Props {
 
 const {
   title,
+  documentTitle,
   description = site.description,
   image = site.defaultImage,
   imageAlt = site.description,
@@ -34,6 +40,7 @@ const {
 } = Astro.props;
 
 const pageTitle = title ? `${title} | ${site.name}` : `${site.name} | ${site.role}`;
+const headTitle = documentTitle ?? pageTitle;
 const markdownAlternate = markdownAlternatePath(Astro.url.pathname);
 const baseStructuredData: StructuredData[] = [
   {
@@ -97,7 +104,7 @@ const allStructuredData = [...baseStructuredData, ...extraStructuredData];
     }
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="alternate" type="application/rss+xml" title={site.name} href="/rss.xml" />
-    <title>{pageTitle}</title>
+    <title>{headTitle}</title>
     <meta property="og:type" content={pageType} />
     <meta property="og:site_name" content={site.name} />
     <meta property="og:title" content={pageTitle} />

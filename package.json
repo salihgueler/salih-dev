@@ -3,7 +3,7 @@
   "type": "module",
   "version": "0.0.1",
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=22.13.0"
   },
   "scripts": {
     "dev": "astro dev",
@@ -11,8 +11,9 @@
     "check": "astro check",
     "import:dev": "node scripts/import-dev.mjs",
     "import:medium": "node scripts/import-medium.mjs",
-    "test": "node --test scripts/*.test.mjs",
-    "verify:build": "node scripts/verify-static-build.mjs",
+    "materialize:talks": "node --import tsx scripts/materialize-api-talks.mjs",
+    "test": "node --import tsx --test \"scripts/*.test.mjs\" \"src/**/*.test.ts\"",
+    "verify:build": "node --import tsx scripts/verify-static-build.mjs",
     "preview": "astro preview",
     "astro": "astro"
   },
@@ -29,6 +30,9 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
+    "fast-check": "4.10.1",
+    "pdfjs-dist": "6.3.289",
+    "tsx": "4.23.13",
     "typescript": "^6.0.3"
   }
 }

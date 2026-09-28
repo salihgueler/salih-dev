@@ -1,8 +1,5 @@
-import {
-  conferences,
-  formatIsoDate,
-  siteContent,
-} from "./site-content";
+import { SITE_ORIGIN } from "./site-origin.js";
+import { conferences, formatIsoDate, siteContent } from "./site-content";
 
 export type SocialKey = "linkedin" | "x" | "github" | "bluesky";
 
@@ -23,7 +20,7 @@ export type Conference = {
 export const site = {
   name: "Salih Güler",
   shortName: "Salih",
-  url: "https://salih.dev",
+  url: SITE_ORIGIN,
   description:
     "Salih Güler is a Senior Developer Advocate at AWS focused on frontend and mobile app development, developer experience, and serverless architecture.",
   defaultImage:
@@ -89,5 +86,6 @@ export const site = {
 export const navigation = [
   { label: "About", href: "/about/" },
   { label: "Blog", href: "/blog/" },
+  { label: "Talks", href: "/talks/" },
   { label: "Contact", href: "/contact/" },
 ] as const;

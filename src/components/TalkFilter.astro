@@ -1,0 +1,218 @@
+---
+/**
+ * Event-type filter controls.
+ *
+ * Feature: talks-section
+ *
+ * The filter is a progressive enhancement over an archive that is already
+ * complete in static HTML:
+ *
+ * - it renders one `All talks` option followed by exactly one option per
+ *   distinct event type assigned to at least one published talk, and no other
+ *   option;
+ * - options are native `button type="button"` controls inside a group labeled
+ *   `Filter talks by event type`, so each has an accessible name and is
+ *   operable with Enter or Space without pointer input;
+ * - single selection is exposed through `aria-pressed`, with `All talks`
+ *   selected in the initial markup so exactly one option is selected at all
+ *   times, including before any script runs;
+ * - the whole control is `hidden` until the filtering controller installs its
+ *   listeners, so a script failure leaves visitors with the full archive rather
+ *   than inert controls. Styling must therefore not override `[hidden]`.
+ *
+ * Author labels are rendered as text only. Every control is addressed by the
+ * code-owned option identifier from the projection (`all-talks`,
+ * `event-type-0`, …), so no author string reaches a CSS selector, a DOM query,
+ * or executable source.
+ *
+ * Selection is in-page state only: nothing here reads or writes a URL, cookie,
+ * storage entry, analytics event, or network resource. The visible non-color
+ * selected-state indicator is driven from the `aria-pressed` attribute in the
+ * stylesheet, so the controller only has to maintain that one attribute.
+ *
+ * When no event-type option exists there is nothing to filter, so the component
+ * renders nothing at all.
+ */
+
+import type { TalkFilterOption } from "../lib/talks/model";
+import type { TalkAllFilterOption } from "../lib/talks/projection";
+
+interface Props {
+  allTalksOption: TalkAllFilterOption;
+  filterOptions: readonly TalkFilterOption[];
+}
+
+const { allTalksOption, filterOptions } = Astro.props;
+
+const options: readonly (TalkAllFilterOption | TalkFilterOption)[] = [
+  allTalksOption,
+  ...filterOptions,
+];
+---
+
+{
+  filterOptions.length > 0 && (
+    <div class="talk-filter" data-talks-filter hidden>
+      <div
+        class="talk-filter-group"
+        role="group"
+        aria-label="Filter talks by event type"
+      >
+        {options.map((option) => (
+          <button
+            type="button"
+            class="talk-filter-option"
+            data-talk-filter-option={option.id}
+            aria-pressed={option.id === allTalksOption.id ? "true" : "false"}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+<script>
+  /*
+   * Progressive filtering.
+   *
+   * All filtering decisions belong to the pure controller in
+   * `src/lib/talks/filter-controller.ts`; this script only reads the rendered
+   * markup, applies the returned state, and reveals the controls.
+   *
+   * Order matters: the archive is already complete and correct in static HTML,
+   * so the initial state is applied and every listener is installed before the
+   * filter stops being `hidden`. A missing region, a malformed archive, or a
+   * script that never runs therefore leaves the full listing in place instead of
+   * exposing controls that cannot work.
+   *
+   * Activation is handled through `click`, which native buttons also emit for
+   * Enter and Space, so no key handling is needed for keyboard parity. The
+   * handler re-focuses the activated button so focus stays on the selected
+   * option, and it performs no navigation and no query-string, cookie, storage,
+   * analytics, or network operation.
+   */
+
+  import {
+    createFilterController,
+    initialFilterState,
+    selectFilterOption,
+    type FilterControllerEntry,
+    type FilterControllerOption,
+    type FilterControllerState,
+    type TalkFilterController,
+  } from "../lib/talks/filter-controller";
+
+  /** The rendered elements one installed filter maintains. */
+  type TalkFilterDom = Readonly<{
+    buttons: ReadonlyMap<string, HTMLButtonElement>;
+    cards: ReadonlyMap<string, HTMLElement>;
+    result: HTMLElement;
+    noMatch: HTMLElement;
+    status: HTMLElement;
+  }>;
+
+  /** Splits a generated event-type identifier list, tolerating empty values. */
+  function readEventTypeIds(value: string | undefined): string[] {
+    if (value === undefined) return [];
+
+    return value.split(/\s+/).filter((id) => id.length > 0);
+  }
+
+  /*
+   * Applies one derived state. Both message regions are written from the
+   * controller's copy as text, never as HTML, so an author label cannot
+   * contribute markup. The regions alternate: the count summary is visible
+   * whenever there are matches, and the no-match copy replaces it otherwise.
+   */
+  function applyState(dom: TalkFilterDom, state: FilterControllerState): void {
+    for (const option of state.options) {
+      dom.buttons
+        .get(option.id)
+        ?.setAttribute("aria-pressed", option.selected ? "true" : "false");
+    }
+
+    for (const id of state.visibleEntryIds) {
+      const card = dom.cards.get(id);
+      if (card !== undefined) card.hidden = false;
+    }
+
+    for (const id of state.hiddenEntryIds) {
+      const card = dom.cards.get(id);
+      if (card !== undefined) card.hidden = true;
+    }
+
+    const hasNoMatchCopy = state.noMatchMessage !== null;
+
+    dom.result.textContent = state.resultMessage;
+    dom.result.hidden = hasNoMatchCopy;
+    dom.noMatch.textContent = state.noMatchMessage ?? "";
+    dom.noMatch.hidden = !hasNoMatchCopy;
+    dom.status.textContent = state.statusMessage;
+  }
+
+  function install(filter: HTMLElement, archive: HTMLElement): void {
+    const result = archive.querySelector<HTMLElement>("[data-talks-result]");
+    const noMatch = archive.querySelector<HTMLElement>("[data-talks-no-match]");
+    const status = archive.querySelector<HTMLElement>("[data-talks-status]");
+
+    if (result === null || noMatch === null || status === null) return;
+
+    const options: FilterControllerOption[] = [];
+    const buttons = new Map<string, HTMLButtonElement>();
+
+    for (const button of filter.querySelectorAll<HTMLButtonElement>(
+      "[data-talk-filter-option]",
+    )) {
+      const id = button.dataset.talkFilterOption;
+      if (id === undefined || id === "" || buttons.has(id)) return;
+
+      buttons.set(id, button);
+      options.push({ id, label: (button.textContent ?? "").trim() });
+    }
+
+    const entries: FilterControllerEntry[] = [];
+    const cards = new Map<string, HTMLElement>();
+
+    for (const card of archive.querySelectorAll<HTMLElement>(
+      "[data-talk-card]",
+    )) {
+      const id = card.dataset.talkId;
+      if (id === undefined || id === "" || cards.has(id)) return;
+
+      cards.set(id, card);
+      entries.push({
+        id,
+        eventTypeIds: readEventTypeIds(card.dataset.talkEventTypes),
+      });
+    }
+
+    let controller: TalkFilterController;
+    try {
+      controller = createFilterController(options, entries);
+    } catch {
+      return;
+    }
+
+    const dom: TalkFilterDom = { buttons, cards, result, noMatch, status };
+
+    let current = initialFilterState(controller);
+    applyState(dom, current);
+
+    for (const [id, button] of buttons) {
+      button.addEventListener("click", () => {
+        current = selectFilterOption(controller, current, id);
+        applyState(dom, current);
+        button.focus({ preventScroll: true });
+      });
+    }
+
+    filter.hidden = false;
+  }
+
+  const filter = document.querySelector<HTMLElement>("[data-talks-filter]");
+  const archive = document.querySelector<HTMLElement>("[data-talks-archive]");
+
+  if (filter !== null && archive !== null) install(filter, archive);
+</script>

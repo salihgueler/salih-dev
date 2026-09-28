@@ -1,25 +1,35 @@
 import type { CollectionEntry } from "astro:content";
 
 import { site } from "../config/site";
-import {
-  formatDate,
-  getPublishedPosts,
-  postUrl,
-  slugify,
-} from "./content";
+import { formatDate, getPublishedPosts, postUrl, slugify } from "./content";
+import { getPublishedTalksSnapshot } from "./talks/gateway";
+import { serializeTalksMarkdown } from "./talks/markdown";
 
-export async function markdownForPath(pathname: string): Promise<string | null> {
+export async function markdownForPath(
+  pathname: string,
+): Promise<string | null> {
   const path = normalizePath(pathname);
+
+  // Talks are resolved through the shared published snapshot rather than the
+  // raw collection, so this document and the HTML archive describe the same
+  // validated records.
+  if (path === "/talks/") {
+    return serializeTalksMarkdown(await getPublishedTalksSnapshot());
+  }
+
   const posts = await getPublishedPosts();
 
   if (path === "/") return homeDocument(posts);
-  if (path === "/blog/") return archiveDocument("Blog", site.description, posts);
+  if (path === "/blog/")
+    return archiveDocument("Blog", site.description, posts);
   if (path === "/about/") return aboutDocument();
   if (path === "/contact/") return contactDocument();
 
   const postMatch = path.match(/^\/blog\/([^/]+)\/$/);
   if (postMatch) {
-    const post = posts.find((entry) => entry.id === decodeURIComponent(postMatch[1]));
+    const post = posts.find(
+      (entry) => entry.id === decodeURIComponent(postMatch[1]),
+    );
     return post ? postDocument(post) : null;
   }
 
@@ -31,7 +41,11 @@ export async function markdownForPath(pathname: string): Promise<string | null> 
     );
     const title = matches[0]?.data.category ?? category.replaceAll("-", " ");
     return matches.length
-      ? archiveDocument(`Category: ${title}`, `Posts filed under ${title}.`, matches)
+      ? archiveDocument(
+          `Category: ${title}`,
+          `Posts filed under ${title}.`,
+          matches,
+        )
       : null;
   }
 
@@ -105,9 +119,7 @@ function contactDocument(): string {
   return [
     `# Contact ${site.name}`,
     "",
-    ...(site.email
-      ? [`Email: [${site.email}](mailto:${site.email})`, ""]
-      : []),
+    ...(site.email ? [`Email: [${site.email}](mailto:${site.email})`, ""] : []),
     "## Social profiles",
     "",
     socialLinks.join("\n"),

@@ -3,9 +3,13 @@ import type { APIRoute } from "astro";
 import { site } from "../config/site";
 import { getPublishedPosts, postUrl } from "../lib/content";
 import { contentSignal } from "../lib/discovery";
+import { getPublishedTalksSnapshot } from "../lib/talks/gateway";
 
 export const GET: APIRoute = async () => {
   const posts = await getPublishedPosts();
+  // Awaiting the shared snapshot keeps this index tied to the same validated
+  // published records as the Talks archive and its Markdown alternate.
+  const talks = await getPublishedTalksSnapshot();
   const lines = [
     `# ${site.name}`,
     "",
@@ -19,6 +23,8 @@ export const GET: APIRoute = async () => {
     `- [Home](${site.url}/): Profile, current location, conferences, and latest posts`,
     `- [About](${site.url}/about/): Biography and areas of work`,
     `- [Blog](${site.url}/blog/): Complete post index`,
+    // Exactly one canonical Talks URL, described from the published snapshot.
+    `- [Talks](${site.url}/talks/): ${talksDescription(talks.length)}`,
     `- [Full corpus](${site.url}/llms-full.txt): Combined public Markdown content`,
     `- [API catalog](${site.url}/api/catalog.json): Discovery and capability status`,
     "",
@@ -45,3 +51,15 @@ export const GET: APIRoute = async () => {
     },
   });
 };
+
+/**
+ * Describes the Talks archive from the published count so the index never
+ * claims a talk the build did not publish.
+ */
+function talksDescription(publishedCount: number): string {
+  const archive = "Talk archive with slides and recordings where available";
+
+  return publishedCount === 0
+    ? archive
+    : `${archive} (${publishedCount} published)`;
+}

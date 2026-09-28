@@ -1,0 +1,689 @@
+{
+  "pbtResults": {
+    "1.9 Write the property-based test for identity-derived record keys": {
+      "status": "passed",
+      "lastRunTimestamp": 1789649662383
+    },
+    "1.7 Write the property-based test for deck path inversion": {
+      "status": "passed",
+      "lastRunTimestamp": 1789649665040
+    },
+    "1.8 Write the property-based test for canonical source-independent identity": {
+      "status": "passed",
+      "lastRunTimestamp": 1789649676683
+    },
+    "1.6 Write the property-based test for safe derived deck locations": {
+      "status": "passed",
+      "lastRunTimestamp": 1789649681903
+    },
+    "2.5 Write the property-based test for closed request contracts": {
+      "status": "passed",
+      "lastRunTimestamp": 1789650367241
+    },
+    "2.7 Write the property-based test for stored/materialized record round trips": {
+      "status": "passed",
+      "lastRunTimestamp": 1789650391498
+    },
+    "2.6 Write the property-based test for metadata-validation parity": {
+      "status": "passed",
+      "lastRunTimestamp": 1789650458691
+    },
+    "2.8 Write the property-based test for materialization confinement": {
+      "status": "passed",
+      "lastRunTimestamp": 1789650733225
+    },
+    "4.9 Write the property-based test for privacy-limited upload logs": {
+      "status": "passed",
+      "lastRunTimestamp": 1789651291753
+    },
+    "4.5 Write the property-based test for constrained grant issuance": {
+      "status": "passed",
+      "lastRunTimestamp": 1789661396880
+    },
+    "4.8 Write the property-based test for fail-closed deck rejection": {
+      "status": "passed",
+      "lastRunTimestamp": 1789651119698
+    },
+    "4.6 Write the property-based test for optimistic mutation preconditions": {
+      "status": "passed",
+      "lastRunTimestamp": 1789651150506
+    },
+    "4.7 Write the property-based test for removal ownership": {
+      "status": "passed",
+      "lastRunTimestamp": 1789652245692
+    },
+    "6.3 Write the property-based test for complete conflict-aware snapshots": {
+      "status": "passed",
+      "lastRunTimestamp": 1789662103759
+    }
+  },
+  "executionHistory": {
+    "1.1 Add exact-pinned infrastructure Lambda dependencies": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648704596
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648719559
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648979763
+      }
+    ],
+    "1.2 Create the browser/build-safe site-origin leaf and explicit shared module boundary": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648704730
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648721627
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648988501
+      }
+    ],
+    "1.3 Implement canonical talk identity and record-key derivation": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648704850
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648723610
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648992109
+      }
+    ],
+    "1.4 Implement code-owned deck identifiers, keys, and slide paths": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648704943
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648729639
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789649003392
+      }
+    ],
+    "1.5 Extract the shared strict PDF byte parser without weakening asset validation": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648705030
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648731677
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789649009842
+      }
+    ],
+    "2.1 Implement the closed talk upload request parser": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648705112
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789649197397
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789649497334
+      }
+    ],
+    "2.2 Implement stored API talk records and frontmatter serialization": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648705208
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789649201413
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789649500159
+      }
+    ],
+    "2.3 Implement the pure API talk materialization planner": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648705293
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789649730948
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650262644
+      }
+    ],
+    "2.4 Add the clear-then-write API talk materializer": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648705392
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650524374
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650841249
+      }
+    ],
+    "3. Checkpoint - Ensure shared tests pass": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648705477
+      },
+      {
+        "executionId": "09668e6c-4ef0-40cc-b72a-f47f008ed146",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789663157758
+      },
+      {
+        "executionId": "09668e6c-4ef0-40cc-b72a-f47f008ed146",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789663317590
+      }
+    ],
+    "4.1 Extend shared content API utilities for the talk routes": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648705562
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789649213715
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789649502955
+      }
+    ],
+    "4.2 Implement the presigned POST upload-start handler": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648705647
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789649733893
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650266058
+      }
+    ],
+    "4.3 Implement the upload-completion and server-side deck-validation handler": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648705775
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789649736623
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650269648
+      }
+    ],
+    "4.4 Implement API talk record listing and conditional removal": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648705867
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789649739984
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650272868
+      }
+    ],
+    "5.1 Extend `ContentApi` with talk functions, routes, and least-privilege IAM": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648705960
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650528381
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650846084
+      }
+    ],
+    "5.2 Add pending-upload expiration to retained content storage": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648706043
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789649012748
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789649179959
+      }
+    ],
+    "5.3 Materialize API talks before every build validation pass": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648706128
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650532113
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650851527
+      }
+    ],
+    "6.1 Add dual-source conflict detection to the validated Talks gateway": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648706214
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789649743710
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650276583
+      }
+    ],
+    "6.2 Add API namespace and identity checks without relaxing static verification": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648706295
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650543008
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650856525
+      }
+    ],
+    "7.1 Update the existing talk authoring and operational contracts": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648706385
+      },
+      {
+        "executionId": "09668e6c-4ef0-40cc-b72a-f47f008ed146",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789662796615
+      },
+      {
+        "executionId": "09668e6c-4ef0-40cc-b72a-f47f008ed146",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789663151994
+      }
+    ],
+    "8. Final checkpoint - Ensure all application and infrastructure validation passes": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789648706532
+      },
+      {
+        "executionId": "09668e6c-4ef0-40cc-b72a-f47f008ed146",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789663323196
+      },
+      {
+        "executionId": "09668e6c-4ef0-40cc-b72a-f47f008ed146",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789663609727
+      }
+    ],
+    "1. Establish shared package and module foundations": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789649009947
+      }
+    ],
+    "1.6 Write the property-based test for safe derived deck locations": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789649545632
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789649716637
+      }
+    ],
+    "1.7 Write the property-based test for deck path inversion": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789649548332
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789649719833
+      }
+    ],
+    "1.8 Write the property-based test for canonical source-independent identity": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789649551761
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789649722637
+      }
+    ],
+    "1.9 Write the property-based test for identity-derived record keys": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789649559344
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789649725549
+      }
+    ],
+    "4. Implement the authenticated talk upload handlers": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650272957
+      }
+    ],
+    "2.5 Write the property-based test for closed request contracts": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650281357
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650502876
+      }
+    ],
+    "2.6 Write the property-based test for metadata-validation parity": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650284800
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650506751
+      }
+    ],
+    "2.7 Write the property-based test for stored/materialized record round trips": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650288297
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650510709
+      }
+    ],
+    "2.9 Add focused parser integration fixtures and tests": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650291923
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650514316
+      }
+    ],
+    "2.8 Write the property-based test for materialization confinement": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650549375
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650861580
+      }
+    ],
+    "2. Implement shared request, record, and materialization contracts": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650841391
+      }
+    ],
+    "5. Wire storage, routes, function packaging, and publisher orchestration": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650851631
+      }
+    ],
+    "6. Resolve one dual-source snapshot and retain strict build verification": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650856649
+      }
+    ],
+    "4.5 Write the property-based test for constrained grant issuance": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650868435
+      },
+      {
+        "executionId": "09668e6c-4ef0-40cc-b72a-f47f008ed146",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789661519564
+      }
+    ],
+    "4.6 Write the property-based test for optimistic mutation preconditions": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650875926
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789652330159
+      }
+    ],
+    "4.7 Write the property-based test for removal ownership": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650880914
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789652335191
+      }
+    ],
+    "4.8 Write the property-based test for fail-closed deck rejection": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650887107
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789652344880
+      }
+    ],
+    "4.9 Write the property-based test for privacy-limited upload logs": [
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789650892352
+      },
+      {
+        "executionId": "9d13313a-205d-47e9-b55b-74492ce9dff7",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789652359904
+      }
+    ],
+    "2.10 Add focused materializer shell integration tests": [
+      {
+        "executionId": "09668e6c-4ef0-40cc-b72a-f47f008ed146",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789661528308
+      },
+      {
+        "executionId": "09668e6c-4ef0-40cc-b72a-f47f008ed146",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789661876559
+      }
+    ],
+    "4.10 Add focused handler integration tests with stubbed AWS clients": [
+      {
+        "executionId": "09668e6c-4ef0-40cc-b72a-f47f008ed146",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789661894157
+      },
+      {
+        "executionId": "09668e6c-4ef0-40cc-b72a-f47f008ed146",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789662325922
+      }
+    ],
+    "5.4 Extend infrastructure template, route, packaging, and IAM tests": [
+      {
+        "executionId": "09668e6c-4ef0-40cc-b72a-f47f008ed146",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789661900644
+      },
+      {
+        "executionId": "09668e6c-4ef0-40cc-b72a-f47f008ed146",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789662330908
+      }
+    ],
+    "6.3 Write the property-based test for complete conflict-aware snapshots": [
+      {
+        "executionId": "09668e6c-4ef0-40cc-b72a-f47f008ed146",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789661905637
+      },
+      {
+        "executionId": "09668e6c-4ef0-40cc-b72a-f47f008ed146",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789662336363
+      }
+    ],
+    "6.4 Add pipeline composition and removal integration coverage": [
+      {
+        "executionId": "09668e6c-4ef0-40cc-b72a-f47f008ed146",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789662342031
+      },
+      {
+        "executionId": "09668e6c-4ef0-40cc-b72a-f47f008ed146",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789662785115
+      }
+    ],
+    "7. Finish implementation wiring and update only existing project documents": [
+      {
+        "executionId": "09668e6c-4ef0-40cc-b72a-f47f008ed146",
+        "chatSessionId": "sess_706dcc02-87b3-4fb9-9c5c-140ad3ccaf86",
+        "timestamp": 1789663152133
+      }
+    ]
+  }
+}
