@@ -180,6 +180,15 @@ export class ContentApi extends Construct {
 
     talkUploadStartFunction.addToRolePolicy(
       new iam.PolicyStatement({
+        actions: ["s3:ListBucket"],
+        conditions: {
+          StringLike: { "s3:prefix": [API_TALK_RECORDS] },
+        },
+        resources: [props.contentBucket.bucketArn],
+      }),
+    );
+    talkUploadStartFunction.addToRolePolicy(
+      new iam.PolicyStatement({
         actions: ["s3:PutObject"],
         resources: [pendingTalkObjectsArn],
       }),

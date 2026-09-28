@@ -445,9 +445,13 @@ test("grants each talk handler only its task-scoped actions and prefixes", () =>
     delivery,
     "/ContentApi/TalkUploadStartFunction/ServiceRole/DefaultPolicy/Resource",
   );
-  assert.equal(start.length, 2);
-  assertStatement(start[0], ["s3:PutObject"], "/talks/pending/*");
-  assertStatement(start[1], ["s3:GetObject"], "/talks/records/*");
+  assert.equal(start.length, 3);
+  assertStatement(start[0], ["s3:ListBucket"], "ContentBucket");
+  assert.deepEqual(start[0].Condition, {
+    StringLike: { "s3:prefix": ["talks/records/*"] },
+  });
+  assertStatement(start[1], ["s3:PutObject"], "/talks/pending/*");
+  assertStatement(start[2], ["s3:GetObject"], "/talks/records/*");
 
   const completion = policyStatements(
     delivery,
