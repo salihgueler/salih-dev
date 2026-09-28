@@ -116,26 +116,47 @@ function requestErrorResponse(
   );
 }
 
+type OptionalTalkMetadata = Pick<
+  TalkFrontmatter,
+  "tags" | "videoUrl" | "sourceCodeUrl"
+>;
+
+/**
+ * Copies every optional author field at the upload boundary. Keeping this in one
+ * helper prevents staging and replacement flows from silently dropping a field
+ * when the talk metadata contract grows.
+ */
+function copyOptionalTalkMetadata(
+  frontmatter: TalkFrontmatter,
+): OptionalTalkMetadata {
+  return Object.freeze({
+    ...(frontmatter.tags === undefined
+      ? {}
+      : { tags: Object.freeze([...frontmatter.tags]) }),
+    ...(frontmatter.videoUrl === undefined
+      ? {}
+      : { videoUrl: frontmatter.videoUrl }),
+    ...(frontmatter.sourceCodeUrl === undefined
+      ? {}
+      : { sourceCodeUrl: frontmatter.sourceCodeUrl }),
+  });
+}
+
 function preservedReplacementMetadata(
   frontmatter: TalkFrontmatter,
   slidePath: string,
 ): TalkFrontmatter {
-  const common = {
+  return Object.freeze({
     title: frontmatter.title,
     eventName: frontmatter.eventName,
     date: frontmatter.date,
     location: frontmatter.location,
     eventUrl: frontmatter.eventUrl,
     eventTypes: Object.freeze([...frontmatter.eventTypes]),
+    ...copyOptionalTalkMetadata(frontmatter),
     slides: slidePath,
     draft: frontmatter.draft,
-  };
-
-  return Object.freeze(
-    frontmatter.videoUrl === undefined
-      ? common
-      : { ...common, videoUrl: frontmatter.videoUrl },
-  );
+  });
 }
 
 type StagedUploadRequest = Readonly<{
@@ -154,9 +175,7 @@ function stagedUploadRequest(request: TalkUploadRequest): StagedUploadRequest {
           location: request.metadata.location,
           eventUrl: request.metadata.eventUrl,
           eventTypes: Object.freeze([...request.metadata.eventTypes]),
-          ...(request.metadata.videoUrl === undefined
-            ? {}
-            : { videoUrl: request.metadata.videoUrl }),
+          ...copyOptionalTalkMetadata(request.metadata),
           draft: request.metadata.draft,
         });
 

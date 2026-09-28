@@ -588,6 +588,47 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
   );
 
   await t.test(
+    "stages topical tags and source-code links without dropping metadata",
+    async () => {
+      const stagedCommands: PutObjectCommand[] = [];
+      s3Send = async (command) => {
+        if (command instanceof GetObjectCommand) throw s3Error(404);
+        if (command instanceof PutObjectCommand) {
+          stagedCommands.push(command);
+          return { ETag: '"staged-metadata"' };
+        }
+        throw new Error(`Unexpected S3 command: ${commandName(command)}`);
+      };
+
+      const sourceCodeUrl = "https://github.com/salihgueler/salih-dev";
+      const taggedMetadata = {
+        ...metadata,
+        eventTypes: ["Session"],
+        tags: ["AI-DLC", "Kiro", "Spec-driven development"],
+        sourceCodeUrl,
+      };
+      const response = await invokeStart(
+        startEvent(JSON.stringify({ metadata: taggedMetadata })),
+      );
+
+      assert.equal(response.statusCode, 201);
+      assert.equal(stagedCommands.length, 1);
+      const staged = stagedCommands[0];
+      if (staged === undefined) assert.fail("Expected one staged request");
+      const body = JSON.parse(String(staged.input.Body)) as {
+        metadata?: Readonly<Record<string, unknown>>;
+      };
+      assert.deepEqual(body.metadata?.eventTypes, ["Session"]);
+      assert.deepEqual(body.metadata?.tags, [
+        "AI-DLC",
+        "Kiro",
+        "Spec-driven development",
+      ]);
+      assert.equal(body.metadata?.sourceCodeUrl, sourceCodeUrl);
+    },
+  );
+
+  await t.test(
     "rejects malformed completion bodies before AWS work",
     async () => {
       const calls: string[] = [];
