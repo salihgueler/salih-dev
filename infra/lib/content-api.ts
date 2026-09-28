@@ -211,6 +211,21 @@ export class ContentApi extends Construct {
 
     talkUploadCompleteFunction.addToRolePolicy(
       new iam.PolicyStatement({
+        actions: ["s3:ListBucket"],
+        conditions: {
+          StringLike: {
+            "s3:prefix": [
+              PENDING_TALK_OBJECTS,
+              APPROVED_TALK_DECKS,
+              API_TALK_RECORDS,
+            ],
+          },
+        },
+        resources: [props.contentBucket.bucketArn],
+      }),
+    );
+    talkUploadCompleteFunction.addToRolePolicy(
+      new iam.PolicyStatement({
         actions: ["s3:GetObject", "s3:DeleteObject"],
         resources: [pendingTalkObjectsArn],
       }),
