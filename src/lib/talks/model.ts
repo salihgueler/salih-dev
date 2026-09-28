@@ -18,6 +18,7 @@ export const TALK_DATA_FIELDS = [
   "location",
   "eventUrl",
   "eventTypes",
+  "tags",
   "slides",
   "videoUrl",
   "sourceCodeUrl",
@@ -53,6 +54,7 @@ export type TalkCriterion =
   | "2.8"
   | "2.9"
   | "2.10"
+  | "2.11"
   | "5.7"
   | "6.5"
   | "6.6"
@@ -111,6 +113,21 @@ export type NormalizedEventType = Readonly<{
   comparisonKey: string;
 }>;
 
+/**
+ * Topical tag with the Author's display label preserved and a canonical
+ * comparison key used for uniqueness, filter options, and filtering.
+ *
+ * A topical tag is a subject classifier ("Serverless", "AWS Amplify") and is
+ * deliberately a distinct type from {@link NormalizedEventType}, which
+ * classifies the event format. The two never share a field, a filter axis, or
+ * a comparison namespace, so a talk's event types and its topical tags cannot
+ * be conflated even when a label coincides.
+ */
+export type NormalizedTag = Readonly<{
+  label: string;
+  comparisonKey: string;
+}>;
+
 /** Supported embeddable video providers. */
 export type TalkVideoProvider = "youtube";
 
@@ -141,6 +158,7 @@ export type TalkFrontmatter = Readonly<{
   location: string;
   eventUrl: string;
   eventTypes: readonly string[];
+  tags?: readonly string[];
   slides: string;
   videoUrl?: string;
   sourceCodeUrl?: string;
@@ -160,6 +178,7 @@ export type NormalizedTalk = Readonly<{
   location: string;
   eventUrl: HttpsUrl;
   eventTypes: readonly NormalizedEventType[];
+  tags: readonly NormalizedTag[];
   slidePath: SlidePath;
   slidePublicUrl: HttpsUrl;
   video: NormalizedVideo | null;

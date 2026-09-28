@@ -25,6 +25,7 @@ export const TALK_UPLOAD_METADATA_FIELDS = [
   "location",
   "eventUrl",
   "eventTypes",
+  "tags",
   "videoUrl",
   "sourceCodeUrl",
   "draft",
@@ -174,6 +175,15 @@ function roundTripTextIssues(metadata: UnknownRecord): UploadIssue[] {
     });
   }
 
+  const tags = metadata.tags;
+  if (Array.isArray(tags)) {
+    tags.forEach((value: unknown, index: number) => {
+      if (typeof value === "string" && API_UNSAFE_TEXT_PATTERN.test(value)) {
+        issues.push(roundTripTextIssue("tags", `metadata.tags[${index}]`));
+      }
+    });
+  }
+
   return issues;
 }
 
@@ -188,6 +198,7 @@ function metadataCandidate(
     location: metadata.location,
     eventUrl: metadata.eventUrl,
     eventTypes: metadata.eventTypes,
+    tags: metadata.tags,
     slides: slidePath,
     videoUrl: metadata.videoUrl,
     sourceCodeUrl: metadata.sourceCodeUrl,
@@ -204,13 +215,29 @@ function toFrontmatter(
   const eventTypes = Object.freeze(
     normalized.eventTypes.map((eventType) => eventType.label),
   );
-  const common = {
+  const base = {
     title: normalized.title,
     eventName: normalized.eventName,
     date: normalized.date,
     location: normalized.location,
     eventUrl: normalized.eventUrl,
     eventTypes,
+  };
+
+  // Topical tags are optional and sit directly after eventTypes so the two
+  // classification axes stay adjacent but separate. An empty list is omitted
+  // from the frontmatter entirely, so a talk with no topical tags round-trips
+  // to the exact same record it would have produced before the field existed.
+  const withTags =
+    normalized.tags.length === 0
+      ? base
+      : {
+          ...base,
+          tags: Object.freeze(normalized.tags.map((tag) => tag.label)),
+        };
+
+  const common = {
+    ...withTags,
     slides: normalized.slidePath,
     draft: normalized.draft,
   };

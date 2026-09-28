@@ -48,11 +48,15 @@ export type FilterControllerOption = Readonly<{
 
 /**
  * One rendered talk entry. `eventTypeIds` holds the generated identifiers of the
- * event types assigned to the entry, never author labels.
+ * event types assigned to the entry, and `topicTagIds` the generated
+ * identifiers of the topical tags assigned to the entry. Both are code-owned
+ * identifiers, never author labels, and the two lists occupy separate
+ * namespaces so a selection on one axis never matches on the other.
  */
 export type FilterControllerEntry = Readonly<{
   id: string;
   eventTypeIds: readonly string[];
+  topicTagIds: readonly string[];
 }>;
 
 /** Selected state of one option. */
@@ -170,15 +174,24 @@ export function createFilterController(
         Object.freeze({
           id: entry.id,
           eventTypeIds: Object.freeze([...entry.eventTypeIds]),
+          topicTagIds: Object.freeze([...entry.topicTagIds]),
         }),
       ),
     ),
   });
 }
 
-/** True when the entry is assigned the generated event-type identifier. */
+/**
+ * True when the entry is assigned the generated identifier `optionId`, on
+ * whichever axis that identifier belongs to. Identifiers are namespaced
+ * (`event-type-N` versus `topic-tag-N`), so a selection matches only against
+ * the axis it names and the two filter dimensions never conflate.
+ */
 function entryMatches(entry: FilterControllerEntry, optionId: string): boolean {
-  return entry.eventTypeIds.includes(optionId);
+  return (
+    entry.eventTypeIds.includes(optionId) ||
+    entry.topicTagIds.includes(optionId)
+  );
 }
 
 /**

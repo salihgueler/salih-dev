@@ -92,6 +92,11 @@ const shapeMessages = {
     "eventTypes must be present exactly once as a list of text values",
   ),
   eventType: criterionMessage("2.6", "each eventTypes value must be text"),
+  tags: criterionMessage(
+    "2.11",
+    "tags must be omitted or supplied once as a list of text values",
+  ),
+  tag: criterionMessage("2.11", "each tags value must be text"),
   slides: criterionMessage(
     "6.7",
     "slides must reference exactly one root-relative PDF path, not a list or object",
@@ -139,6 +144,11 @@ const talkSchema = z
       eventTypes: z.array(z.string({ error: shapeMessages.eventType }), {
         error: shapeMessages.eventTypes,
       }),
+      tags: z
+        .array(z.string({ error: shapeMessages.tag }), {
+          error: shapeMessages.tags,
+        })
+        .optional(),
       slides: z.string({ error: shapeMessages.slides }),
       videoUrl: z.string({ error: shapeMessages.videoUrl }).optional(),
       sourceCodeUrl: z

@@ -17,6 +17,10 @@
  * - the location is displayed exactly once;
  * - exactly the event-type labels assigned to this talk are displayed, once
  *   each, and no label belonging to another talk;
+ * - exactly the topical-tag labels assigned to this talk are displayed, once
+ *   each, in a separate `Topics` region, and no topical label belonging to
+ *   another talk; the region is omitted entirely when the talk has none, so a
+ *   talk without topical tags renders no empty region;
  * - exactly one slide link is rendered, with the visible copy `PDF slides` and
  *   an accessible name containing both `PDF slides` and the talk title;
  * - a `Source code` link is rendered exactly once, and only when the talk
@@ -65,6 +69,13 @@ const sourceCodeLabel = `Source code for ${card.title}`;
  * to toggle the article's `hidden` state. Never author text.
  */
 const eventTypeIds = card.eventTypeIds.join(" ");
+
+/**
+ * Generated topical-tag identifiers of this talk, on their own namespace, used
+ * by the same progressive filter to toggle the article's `hidden` state on the
+ * topical-tag axis. Never author text, and never mixed with `eventTypeIds`.
+ */
+const topicTagIds = card.topicTagIds.join(" ");
 ---
 
 <article
@@ -72,6 +83,7 @@ const eventTypeIds = card.eventTypeIds.join(" ");
   data-talk-card
   data-talk-id={card.id}
   data-talk-event-types={eventTypeIds}
+  data-talk-topic-tags={topicTagIds}
 >
   <h2 class="talk-title">{card.title}</h2>
   <dl class="talk-meta">
@@ -97,6 +109,20 @@ const eventTypeIds = card.eventTypeIds.join(" ");
         </ul>
       </dd>
     </div>
+    {
+      card.topicTags.length > 0 && (
+        <div class="talk-meta-item">
+          <dt>Topics</dt>
+          <dd>
+            <ul class="talk-topic-tags">
+              {card.topicTags.map((tag) => (
+                <li class="talk-topic-tag">{tag.label}</li>
+              ))}
+            </ul>
+          </dd>
+        </div>
+      )
+    }
   </dl>
   <p class="talk-actions">
     <a class="talk-slides-link" href={card.slidePath} aria-label={slidesLabel}>

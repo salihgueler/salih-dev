@@ -320,6 +320,7 @@ rejected. A complete example is:
     "location": "Berlin, Germany",
     "eventUrl": "https://conference.example/talks/agent-ready",
     "eventTypes": ["Conference"],
+    "tags": ["Serverless", "Developer Experience"],
     "videoUrl": "https://www.youtube.com/watch?v=abcdefghijk",
     "sourceCodeUrl": "https://github.com/example/agent-ready-talk",
     "draft": false

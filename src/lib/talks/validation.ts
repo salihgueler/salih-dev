@@ -20,6 +20,7 @@ import {
   type IsoDate,
   type IsoDateParts,
   type NormalizedEventType,
+  type NormalizedTag,
   type NormalizedTalk,
   type NormalizedVideo,
   type SlidePath,
@@ -39,6 +40,17 @@ export const TALK_EVENT_TYPE_MAX_CODE_POINTS = 50;
 /** Inclusive event-type cardinality bounds. */
 export const TALK_EVENT_TYPE_MIN_COUNT = 1;
 export const TALK_EVENT_TYPE_MAX_COUNT = 10;
+
+/** Maximum Unicode code points for one topical tag label. */
+export const TALK_TAG_MAX_CODE_POINTS = 50;
+
+/**
+ * Inclusive topical-tag cardinality bounds. Tags are optional, so the minimum
+ * is zero: an absent field and an empty list both mean "no topical tags". The
+ * maximum bounds how many distinct subjects one talk may carry.
+ */
+export const TALK_TAG_MIN_COUNT = 0;
+export const TALK_TAG_MAX_COUNT = 20;
 
 /** Maximum Unicode code points for an external URL field. */
 export const TALK_URL_MAX_CODE_POINTS = 2048;
@@ -85,6 +97,7 @@ const FIELD_CRITERIA: Readonly<Record<TalkDataField, TalkCriterion>> = {
   location: "2.4",
   eventUrl: "2.5",
   eventTypes: "2.6",
+  tags: "2.11",
   slides: "6.7",
   videoUrl: "2.8",
   sourceCodeUrl: "2.10",
@@ -548,6 +561,110 @@ function validateEventTypes(
 }
 
 /* ---------------------------------------------------------------------------
+ * Topical tags
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Normalizes one topical-tag label. Mirrors {@link normalizeEventType} exactly:
+ * the display label keeps the Author's trimmed capitalization, and the
+ * comparison key is locale-independent case-folded NFC text used for
+ * uniqueness, filter options, and filtering. The two remain distinct types so
+ * the topical-tag axis is never conflated with the event-type axis.
+ */
+export function normalizeTag(value: string): NormalizedTag {
+  const label = normalizeDisplayText(value);
+
+  return Object.freeze({
+    label,
+    comparisonKey: label.toLowerCase().normalize("NFC"),
+  });
+}
+
+/**
+ * Validates the optional topical-tags field.
+ *
+ * The field is backward compatible: an omitted value means "no topical tags"
+ * and normalizes to an empty list, so existing repository and API-authored
+ * records without the field remain valid. An explicit `null` is rejected,
+ * matching the strict repository schema and upload contract. When present it
+ * must be a list of up to {@link TALK_TAG_MAX_COUNT} unique, non-empty display
+ * labels of 1 to {@link TALK_TAG_MAX_CODE_POINTS} Unicode code points each.
+ * Every malformed shape and value is rejected with an exact diagnostic; the
+ * field is never repaired or truncated.
+ */
+function validateTags(
+  value: unknown,
+): FieldResult<readonly NormalizedTag[]> {
+  const criterion = FIELD_CRITERIA.tags;
+
+  if (value === undefined) {
+    return success(Object.freeze([]) as readonly NormalizedTag[]);
+  }
+
+  if (!Array.isArray(value)) {
+    return failure(
+      criterion,
+      `tags must be omitted or a list of 0 to ${TALK_TAG_MAX_COUNT} text values`,
+    );
+  }
+
+  const candidates: readonly unknown[] = value;
+  const failures: FieldFailure[] = [];
+
+  if (candidates.length > TALK_TAG_MAX_COUNT) {
+    failures.push({
+      criterion,
+      message: `tags must contain ${TALK_TAG_MIN_COUNT} to ${TALK_TAG_MAX_COUNT} values`,
+    });
+  }
+
+  const normalized: NormalizedTag[] = [];
+  const seen = new Map<string, string>();
+
+  candidates.forEach((entry, index) => {
+    if (typeof entry !== "string") {
+      failures.push({
+        criterion,
+        message: `tags[${index}] must be a single text value`,
+      });
+      return;
+    }
+
+    const tag = normalizeTag(entry);
+    const length = countCodePoints(tag.label);
+
+    if (length < 1 || length > TALK_TAG_MAX_CODE_POINTS) {
+      failures.push({
+        criterion,
+        message: `tags[${index}] must be 1 to ${TALK_TAG_MAX_CODE_POINTS} Unicode code points after trimming`,
+      });
+      return;
+    }
+
+    const conflict = seen.get(tag.comparisonKey);
+    if (conflict !== undefined) {
+      failures.push({
+        criterion,
+        message: `tags[${index}] "${tag.label}" duplicates "${conflict}" after normalization`,
+      });
+      return;
+    }
+
+    seen.set(tag.comparisonKey, tag.label);
+    normalized.push(tag);
+  });
+
+  if (failures.length > 0) {
+    return Object.freeze({
+      ok: false as const,
+      failures: Object.freeze(failures.map((entry) => Object.freeze(entry))),
+    });
+  }
+
+  return success(Object.freeze(normalized) as readonly NormalizedTag[]);
+}
+
+/* ---------------------------------------------------------------------------
  * Slides
  * ------------------------------------------------------------------------ */
 
@@ -709,6 +826,7 @@ export function normalizeTalkCandidate(
   const location = validateDisplayText(candidate.location, "location");
   const eventUrl = validateEventUrl(candidate.eventUrl);
   const eventTypes = validateEventTypes(candidate.eventTypes);
+  const tags = validateTags(candidate.tags);
   const slides = validateSlides(candidate.slides);
   const video = validateVideoUrl(candidate.videoUrl);
   const sourceCodeUrl = validateSourceCodeUrl(candidate.sourceCodeUrl);
@@ -721,6 +839,7 @@ export function normalizeTalkCandidate(
     ...issuesFrom(recordId, "location", location),
     ...issuesFrom(recordId, "eventUrl", eventUrl),
     ...issuesFrom(recordId, "eventTypes", eventTypes),
+    ...issuesFrom(recordId, "tags", tags),
     ...issuesFrom(recordId, "slides", slides),
     ...issuesFrom(recordId, "videoUrl", video),
     ...issuesFrom(recordId, "sourceCodeUrl", sourceCodeUrl),
@@ -734,6 +853,7 @@ export function normalizeTalkCandidate(
     !location.ok ||
     !eventUrl.ok ||
     !eventTypes.ok ||
+    !tags.ok ||
     !slides.ok ||
     !video.ok ||
     !sourceCodeUrl.ok ||
@@ -754,6 +874,7 @@ export function normalizeTalkCandidate(
     location: location.value,
     eventUrl: eventUrl.value,
     eventTypes: eventTypes.value,
+    tags: tags.value,
     slidePath: slides.value,
     slidePublicUrl: deriveSlidePublicUrl(slides.value),
     video: video.value,

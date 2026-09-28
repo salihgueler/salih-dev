@@ -29,6 +29,7 @@
 import {
   allTalksFilterOption,
   eventTypeOptionId,
+  topicTagOptionId,
   formatNoMatchMessage,
   formatResultMessage,
   TALKS_EMPTY_MESSAGE,
@@ -41,6 +42,7 @@ import type {
   GitHubUrl,
   IsoDate,
   NormalizedEventType,
+  NormalizedTag,
   NormalizedVideo,
   PublishedTalk,
   SlidePath,
@@ -54,6 +56,8 @@ export {
   allTalksFilterOption,
   EVENT_TYPE_ID_PREFIX,
   eventTypeOptionId,
+  TOPIC_TAG_ID_PREFIX,
+  topicTagOptionId,
   formatNoMatchMessage,
   formatResultMessage,
   TALKS_EMPTY_MESSAGE,
@@ -90,6 +94,17 @@ export type TalkTagView = Readonly<{
 }>;
 
 /**
+ * One topical tag as rendered inside a single talk entry. Structurally the same
+ * shape as {@link TalkTagView} but a distinct type, so a topical tag and an
+ * event-type tag are never assigned to the same rendered region or filter axis.
+ */
+export type TalkTopicTagView = Readonly<{
+  id: string;
+  label: string;
+  comparisonKey: string;
+}>;
+
+/**
  * Public projection of one published talk. Repository-internal values such as
  * the resolved slide file path are intentionally absent so no build-only path
  * can reach a public representation.
@@ -104,6 +119,8 @@ export type TalkCardView = Readonly<{
   location: string;
   tags: readonly TalkTagView[];
   eventTypeIds: readonly string[];
+  topicTags: readonly TalkTopicTagView[];
+  topicTagIds: readonly string[];
   slidePath: SlidePath;
   slidePublicUrl: HttpsUrl;
   video: NormalizedVideo | null;
@@ -115,6 +132,7 @@ export type TalkArchiveView = Readonly<{
   cards: readonly TalkCardView[];
   allTalksOption: TalkAllFilterOption;
   filterOptions: readonly TalkFilterOption[];
+  topicFilterOptions: readonly TalkFilterOption[];
   isEmpty: boolean;
   emptyMessage: string;
 }>;
@@ -179,6 +197,40 @@ export function deriveFilterOptions(
   return options;
 }
 
+/**
+ * Derives one stable filter option per distinct topical-tag comparison key that
+ * is assigned to at least one published talk, and no other option.
+ *
+ * Mirrors {@link deriveFilterOptions} but over the topical-tag axis, with its
+ * own `topic-tag-N` identifier namespace so a topic option can never collide
+ * with an event-type option. Options keep first-appearance order in the
+ * published sequence, and each label is the label the Author used on the first
+ * talk carrying that key.
+ */
+export function deriveTopicFilterOptions(
+  talks: readonly PublishedTalk[],
+): TalkFilterOption[] {
+  const options: TalkFilterOption[] = [];
+  const seen = new Set<string>();
+
+  for (const talk of talks) {
+    for (const tag of talk.tags) {
+      if (seen.has(tag.comparisonKey)) continue;
+
+      seen.add(tag.comparisonKey);
+      options.push(
+        Object.freeze({
+          id: topicTagOptionId(options.length),
+          label: tag.label,
+          comparisonKey: tag.comparisonKey,
+        }),
+      );
+    }
+  }
+
+  return options;
+}
+
 /** Indexes derived options by comparison key for card projection. */
 function indexOptionIds(
   options: readonly TalkFilterOption[],
@@ -211,20 +263,41 @@ function projectTag(
   });
 }
 
+function projectTopicTag(
+  tag: NormalizedTag,
+  optionIds: ReadonlyMap<string, string>,
+): TalkTopicTagView {
+  const id = optionIds.get(tag.comparisonKey);
+  if (id === undefined) {
+    throw new Error(
+      `Topical tag "${tag.label}" has no derived filter option; project cards from the same published snapshot used to derive topic options`,
+    );
+  }
+
+  return Object.freeze({
+    id,
+    label: tag.label,
+    comparisonKey: tag.comparisonKey,
+  });
+}
+
 /**
  * Projects one published talk to its card view.
  *
  * The tag projection is lossless: it contains exactly the event-type labels
  * assigned to this talk, each exactly once, in source order, and no label from
- * another talk.
+ * another talk. The topical-tag projection is lossless in the same way over the
+ * separate topical-tag axis, so the two never share a rendered region.
  */
 export function projectTalkCard(
   talk: PublishedTalk,
   optionIds: ReadonlyMap<string, string>,
+  topicOptionIds: ReadonlyMap<string, string>,
 ): TalkCardView {
   const tags = talk.eventTypes.map((eventType) =>
     projectTag(eventType, optionIds),
   );
+  const topicTags = talk.tags.map((tag) => projectTopicTag(tag, topicOptionIds));
 
   return Object.freeze({
     id: talk.id,
@@ -236,6 +309,8 @@ export function projectTalkCard(
     location: talk.location,
     tags: Object.freeze(tags),
     eventTypeIds: Object.freeze(tags.map((tag) => tag.id)),
+    topicTags: Object.freeze(topicTags),
+    topicTagIds: Object.freeze(topicTags.map((tag) => tag.id)),
     slidePath: talk.slidePath,
     slidePublicUrl: talk.slidePublicUrl,
     video: talk.video,
@@ -246,18 +321,23 @@ export function projectTalkCard(
 /**
  * Projects the published snapshot into the archive view: one card per published
  * talk in the snapshot's order, the "All talks" option, the distinct event-type
- * options, and the empty-archive state.
+ * options, the distinct topical-tag options, and the empty-archive state.
  */
 export function projectTalkArchive(
   talks: readonly PublishedTalk[],
 ): TalkArchiveView {
   const filterOptions = deriveFilterOptions(talks);
   const optionIds = indexOptionIds(filterOptions);
+  const topicFilterOptions = deriveTopicFilterOptions(talks);
+  const topicOptionIds = indexOptionIds(topicFilterOptions);
 
   return Object.freeze({
-    cards: Object.freeze(talks.map((talk) => projectTalkCard(talk, optionIds))),
+    cards: Object.freeze(
+      talks.map((talk) => projectTalkCard(talk, optionIds, topicOptionIds)),
+    ),
     allTalksOption: allTalksFilterOption,
     filterOptions: Object.freeze(filterOptions),
+    topicFilterOptions: Object.freeze(topicFilterOptions),
     isEmpty: talks.length === 0,
     emptyMessage: TALKS_EMPTY_MESSAGE,
   });
@@ -271,6 +351,14 @@ export function talkMatchesEventType(
   return talk.eventTypes.some(
     (eventType) => eventType.comparisonKey === comparisonKey,
   );
+}
+
+/** True when the talk is assigned the given topical-tag comparison key. */
+export function talkMatchesTopicTag(
+  talk: PublishedTalk,
+  comparisonKey: string,
+): boolean {
+  return talk.tags.some((tag) => tag.comparisonKey === comparisonKey);
 }
 
 /**

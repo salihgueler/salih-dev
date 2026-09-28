@@ -10,6 +10,10 @@
  * - it renders one `All talks` option followed by exactly one option per
  *   distinct event type assigned to at least one published talk, and no other
  *   option;
+ * - it renders a separate labeled group with one option per distinct topical
+ *   tag assigned to at least one published talk, on its own `topic-tag-N`
+ *   identifier namespace, so a topical selection is never conflated with an
+ *   event-type selection;
  * - options are native `button type="button"` controls inside a group labeled
  *   `Filter talks by event type`, so each has an accessible name and is
  *   operable with Enter or Space without pointer input;
@@ -30,8 +34,8 @@
  * selected-state indicator is driven from the `aria-pressed` attribute in the
  * stylesheet, so the controller only has to maintain that one attribute.
  *
- * When no event-type option exists there is nothing to filter, so the component
- * renders nothing at all.
+ * When neither an event-type option nor a topical-tag option exists there is
+ * nothing to filter, so the component renders nothing at all.
  */
 
 import type { TalkFilterOption } from "../lib/talks/model";
@@ -40,9 +44,10 @@ import type { TalkAllFilterOption } from "../lib/talks/projection";
 interface Props {
   allTalksOption: TalkAllFilterOption;
   filterOptions: readonly TalkFilterOption[];
+  topicFilterOptions: readonly TalkFilterOption[];
 }
 
-const { allTalksOption, filterOptions } = Astro.props;
+const { allTalksOption, filterOptions, topicFilterOptions } = Astro.props;
 
 const options: readonly (TalkAllFilterOption | TalkFilterOption)[] = [
   allTalksOption,
@@ -51,7 +56,7 @@ const options: readonly (TalkAllFilterOption | TalkFilterOption)[] = [
 ---
 
 {
-  filterOptions.length > 0 && (
+  (filterOptions.length > 0 || topicFilterOptions.length > 0) && (
     <div class="talk-filter" data-talks-filter hidden>
       <div
         class="talk-filter-group"
@@ -69,6 +74,24 @@ const options: readonly (TalkAllFilterOption | TalkFilterOption)[] = [
           </button>
         ))}
       </div>
+      {topicFilterOptions.length > 0 && (
+        <div
+          class="talk-filter-group talk-filter-group-topics"
+          role="group"
+          aria-label="Filter talks by topic"
+        >
+          {topicFilterOptions.map((option) => (
+            <button
+              type="button"
+              class="talk-filter-option"
+              data-talk-filter-option={option.id}
+              aria-pressed="false"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -113,8 +136,8 @@ const options: readonly (TalkAllFilterOption | TalkFilterOption)[] = [
     status: HTMLElement;
   }>;
 
-  /** Splits a generated event-type identifier list, tolerating empty values. */
-  function readEventTypeIds(value: string | undefined): string[] {
+  /** Splits a generated identifier list, tolerating empty values. */
+  function readIdList(value: string | undefined): string[] {
     if (value === undefined) return [];
 
     return value.split(/\s+/).filter((id) => id.length > 0);
@@ -184,7 +207,8 @@ const options: readonly (TalkAllFilterOption | TalkFilterOption)[] = [
       cards.set(id, card);
       entries.push({
         id,
-        eventTypeIds: readEventTypeIds(card.dataset.talkEventTypes),
+        eventTypeIds: readIdList(card.dataset.talkEventTypes),
+        topicTagIds: readIdList(card.dataset.talkTopicTags),
       });
     }
 

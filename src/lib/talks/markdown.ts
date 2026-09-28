@@ -14,8 +14,8 @@
  *
  * 1. Author text is emitted as Markdown-safe text. Structural characters are
  *    backslash-escaped and whitespace runs are collapsed, so a title, event
- *    name, location, or event-type label cannot introduce a heading, list,
- *    emphasis span, code span, link, raw HTML, or extra block.
+ *    name, location, event-type label, or topical-tag label cannot introduce a
+ *    heading, list, emphasis span, code span, link, raw HTML, or extra block.
  * 2. Validated URLs are emitted only as link destinations inside angle
  *    brackets, with the few characters that could terminate a destination
  *    percent-encoded. Author values are never interpreted as Markdown.
@@ -105,6 +105,10 @@ function serializeTalkSection(talk: PublishedTalk): string {
     .map((eventType) => escapeMarkdownText(eventType.label))
     .join(", ");
 
+  const topicTags = talk.tags
+    .map((tag) => escapeMarkdownText(tag.label))
+    .join(", ");
+
   return [
     `## ${escapeMarkdownText(talk.title)}`,
     "",
@@ -112,6 +116,10 @@ function serializeTalkSection(talk: PublishedTalk): string {
     `Date: ${formatTalkDate(talk.date)} (${talk.date})`,
     `Location: ${escapeMarkdownText(talk.location)}`,
     `Event types: ${eventTypes}`,
+    // Topical tags are a separate classification axis and are emitted on their
+    // own line, only when the talk carries at least one, so the machine-readable
+    // representation never conflates them with the event types above.
+    ...(talk.tags.length === 0 ? [] : [`Tags: ${topicTags}`]),
     `Slides: ${autolink(talk.slidePublicUrl)}`,
     ...(talk.video === null ? [] : [`Video: ${autolink(talk.video.sourceUrl)}`]),
     ...(talk.sourceCodeUrl === null

@@ -60,6 +60,9 @@ const talksStructuredData = {
       position: index + 1,
       name: card.title,
       url: card.slidePublicUrl,
+      ...(card.topicTags.length === 0
+        ? {}
+        : { keywords: card.topicTags.map((tag) => tag.label) }),
     })),
   },
 };
@@ -83,6 +86,7 @@ const talksStructuredData = {
   <TalkFilter
     allTalksOption={archive.allTalksOption}
     filterOptions={archive.filterOptions}
+    topicFilterOptions={archive.topicFilterOptions}
   />
   <TalkArchive archive={archive} />
 </BaseLayout>

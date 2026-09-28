@@ -30,6 +30,7 @@ type ValidMetadataPayload = Readonly<{
   location: string;
   eventUrl: string;
   eventTypes: readonly string[];
+  tags?: readonly string[];
   videoUrl?: string;
   sourceCodeUrl?: string;
   draft?: boolean;
@@ -92,6 +93,21 @@ const eventTypesArbitrary = fc.uniqueArray(
   { minLength: 1, maxLength: 5 },
 );
 
+const tagsArbitrary = fc.oneof(
+  fc.constant(undefined),
+  fc.uniqueArray(
+    fc.constantFrom(
+      "Serverless",
+      "AWS Amplify",
+      "Flutter",
+      "Developer Experience",
+      "GraphQL",
+      "Generative AI",
+    ),
+    { minLength: 0, maxLength: 5 },
+  ),
+);
+
 const videoUrlArbitrary = fc.oneof(
   fc.constant(undefined),
   fc
@@ -124,6 +140,7 @@ const validMetadataArbitrary: fc.Arbitrary<ValidMetadataPayload> = fc
     safeDisplayTextArbitrary,
     eventUrlArbitrary,
     eventTypesArbitrary,
+    tagsArbitrary,
     videoUrlArbitrary,
     sourceCodeUrlArbitrary,
     fc.oneof(fc.constant(undefined), fc.boolean()),
@@ -136,6 +153,7 @@ const validMetadataArbitrary: fc.Arbitrary<ValidMetadataPayload> = fc
       location,
       eventUrl,
       eventTypes,
+      tags,
       videoUrl,
       sourceCodeUrl,
       draft,
@@ -146,6 +164,7 @@ const validMetadataArbitrary: fc.Arbitrary<ValidMetadataPayload> = fc
       location,
       eventUrl,
       eventTypes,
+      ...(tags === undefined ? {} : { tags }),
       ...(videoUrl === undefined ? {} : { videoUrl }),
       ...(sourceCodeUrl === undefined ? {} : { sourceCodeUrl }),
       ...(draft === undefined ? {} : { draft }),
@@ -243,6 +262,7 @@ const unconstrainedMetadataArbitrary: fc.Arbitrary<MetadataPayload> = fc.record(
     location: arbitraryFieldValue,
     eventUrl: arbitraryFieldValue,
     eventTypes: arbitraryFieldValue,
+    tags: arbitraryFieldValue,
     videoUrl: arbitraryFieldValue,
     sourceCodeUrl: arbitraryFieldValue,
     draft: arbitraryFieldValue,
@@ -268,6 +288,7 @@ function repositoryCandidate(
     location: metadata.location,
     eventUrl: metadata.eventUrl,
     eventTypes: metadata.eventTypes,
+    tags: metadata.tags,
     slides: slidePath,
     videoUrl: metadata.videoUrl,
     sourceCodeUrl: metadata.sourceCodeUrl,
@@ -276,7 +297,7 @@ function repositoryCandidate(
 }
 
 function toExpectedFrontmatter(talk: NormalizedTalk): TalkFrontmatter {
-  const common = {
+  const base = {
     title: talk.title,
     eventName: talk.eventName,
     date: talk.date,
@@ -285,6 +306,15 @@ function toExpectedFrontmatter(talk: NormalizedTalk): TalkFrontmatter {
     eventTypes: Object.freeze(
       talk.eventTypes.map((eventType) => eventType.label),
     ),
+  };
+
+  const withTags =
+    talk.tags.length === 0
+      ? base
+      : { ...base, tags: Object.freeze(talk.tags.map((tag) => tag.label)) };
+
+  const common = {
+    ...withTags,
     slides: talk.slidePath,
     draft: talk.draft,
   };
@@ -326,6 +356,14 @@ function apiRoundTripIssueCount(metadata: MetadataPayload): number {
         typeof eventType === "string" &&
         API_UNSAFE_TEXT_PATTERN.test(eventType)
       ) {
+        count += 1;
+      }
+    }
+  }
+
+  if (Array.isArray(metadata.tags)) {
+    for (const tag of metadata.tags) {
+      if (typeof tag === "string" && API_UNSAFE_TEXT_PATTERN.test(tag)) {
         count += 1;
       }
     }
