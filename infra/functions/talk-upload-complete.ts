@@ -303,8 +303,18 @@ export const handler: Handler<
   let modules: TalkModules;
   try {
     modules = await loadTalkModules();
-  } catch {
-    console.error("Talk upload validation modules could not be loaded");
+  } catch (error: unknown) {
+    const detail =
+      error instanceof Error
+        ? {
+            name: error.name,
+            message: error.message,
+            ...("code" in error && typeof error.code === "string"
+              ? { code: error.code }
+              : {}),
+          }
+        : { name: "UnknownError", message: String(error) };
+    console.error("Talk upload validation modules could not be loaded", detail);
     return jsonResponse(500, { error: "talk_upload_failed" });
   }
 
