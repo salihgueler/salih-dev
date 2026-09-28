@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { createRequire } from "node:module";
 import {
   cp,
   mkdir,
@@ -30,14 +29,9 @@ import { materializeApiTalks } from "./materialize-api-talks.mjs";
 
 const execFileAsync = promisify(execFile);
 const REPOSITORY_ROOT = path.resolve(import.meta.dirname, "..");
-const EDITOR_ARN = "arn:aws:iam::123456789012:root";
-const CONTENT_BUCKET = "local-pipeline-content";
-const PUBLISHER_PROJECT = "local-pipeline-publisher";
 const API_PUBLISHED_DECK_ID = "10000000-0000-4000-8000-000000000001";
 const API_DRAFT_DECK_ID = "20000000-0000-4000-8000-000000000002";
 const UNREFERENCED_DECK_ID = "30000000-0000-4000-8000-000000000003";
-const API_PUBLISHED_ETAG = '"api-published-version"';
-const STALE_ETAG = '"stale-version"';
 
 const GIT_PUBLISHED = Object.freeze({
   title: "Git Published Talk",
@@ -427,61 +421,12 @@ function assertComposition(
   }
 }
 
-function removalEvent(recordKey, version, includeIntent = true) {
-  return {
-    version: "2.0",
-    routeKey: `DELETE /v1/talks/records/${recordKey}`,
-    rawPath: `/v1/talks/records/${recordKey}`,
-    rawQueryString: "",
-    headers: {
-      "if-match": version,
-      ...(includeIntent ? { "x-talk-removal": "confirmed" } : {}),
-    },
-    requestContext: {
-      accountId: "123456789012",
-      apiId: "local-integration-api",
-      authorizer: {
-        iam: {
-          accessKey: "ASIATEMPORARY",
-          accountId: "123456789012",
-          callerId: "local-integration-caller",
-          cognitoIdentity: null,
-          principalOrgId: "o-local",
-          userArn: EDITOR_ARN,
-          userId: "local-integration-user",
-        },
-      },
-      domainName: "api.example.test",
-      domainPrefix: "api",
-      http: {
-        method: "DELETE",
-        path: `/v1/talks/records/${recordKey}`,
-        protocol: "HTTP/1.1",
-        sourceIp: "192.0.2.10",
-        userAgent: "integration-test",
-      },
-      requestId: "pipeline-removal-request",
-      routeKey: `DELETE /v1/talks/records/${recordKey}`,
-      stage: "$default",
-      time: "01/Jan/2026:00:00:00 +0000",
-      timeEpoch: 1_767_225_600_000,
-    },
-    pathParameters: { recordKey },
-    isBase64Encoded: false,
-  };
-}
-
-function responseBody(response) {
-  assert.equal(typeof response.body, "string");
-  return JSON.parse(response.body);
-}
-
 async function fileSnapshot(paths) {
   return Promise.all(paths.map((file) => readFile(file)));
 }
 
 // Validates: Requirements 7.1, 7.6, 8.1-8.6, 9.5-9.8, 11.5
-test("publisher composes mixed talk sources and removes one API record from a fresh snapshot", async (context) => {
+test("publisher composes mixed talk sources and reflects an API record removal in a fresh snapshot", async (context) => {
   const temporaryRoot = await mkdtemp(
     path.join(tmpdir(), "salih-dev-talk-pipeline-"),
   );
@@ -537,156 +482,14 @@ test("publisher composes mixed talk sources and removes one API record from a fr
     false,
   );
 
-  const requireFromInfra = createRequire(
-    path.join(REPOSITORY_ROOT, "infra/package.json"),
+  // The API handler's authorization, preconditions, deletion ordering, and build
+  // trigger are covered by the infrastructure test suite. This publisher-only
+  // test starts from the durable store state left after an accepted removal so
+  // it remains runnable from the production source asset, which excludes infra/.
+  await rm(
+    path.join(store.recordRoot, `${apiPublishedRecord.recordKey}.json`),
   );
-  const { CodeBuildClient } = requireFromInfra("@aws-sdk/client-codebuild");
-  const { S3Client, S3ServiceException } =
-    requireFromInfra("@aws-sdk/client-s3");
-  const originalS3Send = S3Client.prototype.send;
-  const originalCodeBuildSend = CodeBuildClient.prototype.send;
-  const originalEnvironment = {
-    CONTENT_ALLOWED_CALLER_ARNS: process.env.CONTENT_ALLOWED_CALLER_ARNS,
-    CONTENT_BUCKET_NAME: process.env.CONTENT_BUCKET_NAME,
-    PUBLISHER_PROJECT_NAME: process.env.PUBLISHER_PROJECT_NAME,
-    REPOSITORY_TALK_RECORD_KEYS: process.env.REPOSITORY_TALK_RECORD_KEYS,
-  };
-  const originalConsoleLog = console.log;
-  const sequence = [];
-  let buildCalls = 0;
-
-  process.env.CONTENT_ALLOWED_CALLER_ARNS = EDITOR_ARN;
-  process.env.CONTENT_BUCKET_NAME = CONTENT_BUCKET;
-  process.env.PUBLISHER_PROJECT_NAME = PUBLISHER_PROJECT;
-  process.env.REPOSITORY_TALK_RECORD_KEYS = deriveTalkRecordKey(
-    deriveTalkIdentity(GIT_PUBLISHED.date, GIT_PUBLISHED.title),
-  );
-  console.log = () => {};
-
-  const preconditionError = () =>
-    new S3ServiceException({
-      name: "PreconditionFailed",
-      $fault: "client",
-      $metadata: { httpStatusCode: 412 },
-    });
-
-  S3Client.prototype.send = async (command) => {
-    const commandName = command.constructor.name;
-    const key = command.input.Key;
-    sequence.push(`${commandName}:${key ?? ""}`);
-
-    if (commandName === "GetObjectCommand") {
-      if (command.input.IfMatch !== API_PUBLISHED_ETAG) {
-        throw preconditionError();
-      }
-      return {
-        Body: {
-          transformToString: async () =>
-            readFile(
-              path.join(
-                store.recordRoot,
-                `${apiPublishedRecord.recordKey}.json`,
-              ),
-              "utf8",
-            ),
-        },
-        ETag: API_PUBLISHED_ETAG,
-      };
-    }
-
-    if (commandName === "DeleteObjectCommand") {
-      if (key === `talks/records/${apiPublishedRecord.recordKey}.json`) {
-        if (command.input.IfMatch !== API_PUBLISHED_ETAG) {
-          throw preconditionError();
-        }
-        await rm(
-          path.join(store.recordRoot, `${apiPublishedRecord.recordKey}.json`),
-        );
-        return {};
-      }
-      if (key === `talks/decks/${API_PUBLISHED_DECK_ID}.pdf`) {
-        await rm(path.join(store.deckRoot, `${API_PUBLISHED_DECK_ID}.pdf`));
-        return {};
-      }
-    }
-
-    throw new Error(`Unexpected local S3 command: ${commandName}`);
-  };
-  CodeBuildClient.prototype.send = async (command) => {
-    assert.equal(command.constructor.name, "StartBuildCommand");
-    assert.equal(command.input.projectName, PUBLISHER_PROJECT);
-    buildCalls += 1;
-    sequence.push("StartBuildCommand");
-    return { build: { id: "local-removal-build" } };
-  };
-
-  try {
-    const { handler: recordsHandler } =
-      await import("../infra/functions/talk-records.ts");
-
-    sequence.length = 0;
-    const missingIntent = await recordsHandler(
-      removalEvent(apiPublishedRecord.recordKey, API_PUBLISHED_ETAG, false),
-    );
-    assert.equal(missingIntent.statusCode, 428);
-    assert.deepEqual(sequence, []);
-
-    const repositoryRecordKey = process.env.REPOSITORY_TALK_RECORD_KEYS;
-    sequence.length = 0;
-    const repositoryRemoval = await recordsHandler(
-      removalEvent(repositoryRecordKey, API_PUBLISHED_ETAG),
-    );
-    assert.equal(repositoryRemoval.statusCode, 409);
-    assert.equal(
-      responseBody(repositoryRemoval).error,
-      "repository_authored_talk",
-    );
-    assert.deepEqual(sequence, []);
-
-    sequence.length = 0;
-    const staleRemoval = await recordsHandler(
-      removalEvent(apiPublishedRecord.recordKey, STALE_ETAG),
-    );
-    assert.equal(staleRemoval.statusCode, 412);
-    assert.equal(responseBody(staleRemoval).error, "record_changed");
-    assert.deepEqual(sequence, [
-      `GetObjectCommand:talks/records/${apiPublishedRecord.recordKey}.json`,
-    ]);
-    assert.equal(
-      await readFile(
-        path.join(store.recordRoot, `${apiPublishedRecord.recordKey}.json`),
-        "utf8",
-      ),
-      serializeApiTalkRecord(apiPublishedRecord),
-    );
-
-    sequence.length = 0;
-    const acceptedRemoval = await recordsHandler(
-      removalEvent(apiPublishedRecord.recordKey, API_PUBLISHED_ETAG),
-    );
-    assert.equal(acceptedRemoval.statusCode, 202);
-    assert.deepEqual(responseBody(acceptedRemoval), {
-      buildId: "local-removal-build",
-      deckId: API_PUBLISHED_DECK_ID,
-      recordKey: apiPublishedRecord.recordKey,
-      status: "publishing",
-    });
-    assert.deepEqual(sequence, [
-      `GetObjectCommand:talks/records/${apiPublishedRecord.recordKey}.json`,
-      `DeleteObjectCommand:talks/records/${apiPublishedRecord.recordKey}.json`,
-      `DeleteObjectCommand:talks/decks/${API_PUBLISHED_DECK_ID}.pdf`,
-      "StartBuildCommand",
-    ]);
-    assert.equal(buildCalls, 1);
-  } finally {
-    S3Client.prototype.send = originalS3Send;
-    CodeBuildClient.prototype.send = originalCodeBuildSend;
-    console.log = originalConsoleLog;
-    for (const [name, value] of Object.entries(originalEnvironment)) {
-      if (value === undefined) delete process.env[name];
-      else process.env[name] = value;
-    }
-  }
+  await rm(path.join(store.deckRoot, `${API_PUBLISHED_DECK_ID}.pdf`));
 
   const secondSnapshot = await createPublisherSnapshot(
     temporaryRoot,
