@@ -30,6 +30,8 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
+    "@aws-sdk/client-codebuild": "3.1127.0",
+    "@aws-sdk/client-s3": "3.1127.0",
     "fast-check": "4.10.1",
     "pdfjs-dist": "6.3.289",
     "tsx": "4.23.13",
