@@ -464,6 +464,52 @@ test("bundles upload completion as ESM so the PDF parser loads through import", 
   assert.match(source, /from\s*["']pdfjs-dist\/legacy\/build\/pdf\.mjs["']/u);
 });
 
+test("lets every talk handler list each prefix it reads so absent keys are 404", () => {
+  // S3 reports a missing key as AccessDenied (403), not 404, when the caller
+  // may GetObject but not ListBucket. Handlers treat 404 as "absent", so every
+  // readable talk prefix needs a matching prefix-scoped ListBucket grant.
+  const { delivery } = createStacks();
+  for (const handler of [
+    "TalkUploadStartFunction",
+    "TalkUploadCompleteFunction",
+    "TalkRecordsFunction",
+  ]) {
+    const statements = policyStatements(
+      delivery,
+      `/ContentApi/${handler}/ServiceRole/DefaultPolicy/Resource`,
+    );
+    const listablePrefixes = new Set(
+      statements
+        .filter((statement) =>
+          asStringArray(statement.Action, `${handler} actions`).includes(
+            "s3:ListBucket",
+          ),
+        )
+        .flatMap((statement) => {
+          const condition = asRecord(statement.Condition, `${handler} list condition`);
+          const like = asRecord(condition.StringLike, `${handler} StringLike`);
+          return asStringArray(like["s3:prefix"], `${handler} prefixes`);
+        }),
+    );
+    const readablePrefixes = statements
+      .filter((statement) =>
+        asStringArray(statement.Action, `${handler} actions`).includes(
+          "s3:GetObject",
+        ),
+      )
+      .flatMap((statement) =>
+        JSON.stringify(statement.Resource).match(/talks\/[a-z]+\/\*/gu) ?? [],
+      );
+    assert.ok(readablePrefixes.length > 0, `${handler} reads a talk prefix`);
+    for (const prefix of readablePrefixes) {
+      assert.ok(
+        listablePrefixes.has(prefix),
+        `${handler} can read ${prefix} but cannot list it`,
+      );
+    }
+  }
+});
+
 test("grants each talk handler only its task-scoped actions and prefixes", () => {
   const { delivery } = createStacks();
   const start = policyStatements(
@@ -482,23 +528,29 @@ test("grants each talk handler only its task-scoped actions and prefixes", () =>
     delivery,
     "/ContentApi/TalkUploadCompleteFunction/ServiceRole/DefaultPolicy/Resource",
   );
-  assert.equal(completion.length, 4);
+  assert.equal(completion.length, 5);
+  assertStatement(completion[0], ["s3:ListBucket"], "ContentBucket");
+  assert.deepEqual(completion[0].Condition, {
+    StringLike: {
+      "s3:prefix": ["talks/pending/*", "talks/decks/*", "talks/records/*"],
+    },
+  });
   assertStatement(
-    completion[0],
+    completion[1],
     ["s3:GetObject", "s3:DeleteObject"],
     "/talks/pending/*",
   );
   assertStatement(
-    completion[1],
+    completion[2],
     ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
     "/talks/decks/*",
   );
   assertStatement(
-    completion[2],
+    completion[3],
     ["s3:GetObject", "s3:PutObject"],
     "/talks/records/*",
   );
-  assertStatement(completion[3], ["codebuild:StartBuild"], "Publisher");
+  assertStatement(completion[4], ["codebuild:StartBuild"], "Publisher");
 
   const records = policyStatements(
     delivery,
