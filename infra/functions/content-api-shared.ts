@@ -74,6 +74,51 @@ export async function invalidateDynamicPaths(
   return { invalidationId: result.Invalidation?.Id };
 }
 
+/**
+ * Starts the static publisher build DURING THE ROLLOUT so the baked pages the
+ * off path serves stay current.
+ *
+ * Feature: render-rollout-flag (Part 2 dual writes).
+ *
+ * A content change cannot be split per visitor: until the rollout is at 100%,
+ * visitors on the OFF path see the baked static page, so a write must refresh
+ * BOTH the request-time render (via the scoped invalidation the caller already
+ * issues) AND the baked pages (via the publisher build this triggers). This is
+ * the rebuild PR #10 removed, back only for the rollout window and gated on the
+ * `RENDER_ROLLOUT_ACTIVE` env flag; once the flag is removed (Step 11) this is a
+ * no-op again.
+ *
+ * It is best-effort and never fails the write: the invalidation already made the
+ * on-path change live, and a missed publisher build only delays the off-path
+ * baked page until the next build. The returned `buildId` is for logging; the
+ * write's response contract is unchanged (it still reports `invalidationId`).
+ */
+export async function maybeStartPublisherBuild(): Promise<string | null> {
+  if (process.env.RENDER_ROLLOUT_ACTIVE !== "1") return null;
+  const projectName = process.env.PUBLISHER_PROJECT_NAME;
+  if (projectName === undefined || projectName.trim() === "") return null;
+  try {
+    const { CodeBuildClient, StartBuildCommand } = await import(
+      "@aws-sdk/client-codebuild"
+    );
+    const client = new CodeBuildClient({});
+    const result = await client.send(
+      new StartBuildCommand({ projectName }),
+    );
+    return result.build?.id ?? null;
+  } catch (error) {
+    // A failed publisher trigger must never fail the write; the on-path change
+    // is already live via the invalidation. Log and continue.
+    console.warn(
+      JSON.stringify({
+        event: "rollout_publisher_build_failed",
+        message: error instanceof Error ? error.message : "unknown",
+      }),
+    );
+    return null;
+  }
+}
+
 export const TALK_LOG_ACTIONS = {
   authorization: "authorize-content-editor",
   removal: "talk-record-removed",

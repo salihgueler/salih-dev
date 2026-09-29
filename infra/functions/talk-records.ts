@@ -17,6 +17,7 @@ import {
   isExpectedEditor,
   jsonResponse,
   logTalkStoreChange,
+  maybeStartPublisherBuild,
   parseIfMatchPrecondition,
   parseStrongEntityTag,
   requestHeader,
@@ -359,6 +360,8 @@ async function handleRemoval(
     if (!invalidationId) {
       throw new Error("CloudFront returned no invalidation identifier");
     }
+    // During the rollout, also refresh the baked pages the off path serves.
+    const buildId = await maybeStartPublisherBuild();
     logTalkStoreChange(event, {
       action: TALK_LOG_ACTIONS.removal,
       storedVersion: stored.etag,
@@ -366,6 +369,7 @@ async function handleRemoval(
     });
     return jsonResponse(202, {
       invalidationId,
+      ...(buildId === null ? {} : { buildId }),
       deckId: stored.record.deckId,
       recordKey,
       status: "published",

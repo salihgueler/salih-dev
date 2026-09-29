@@ -15,6 +15,7 @@ import {
   invalidateDynamicPaths,
   isExpectedEditor,
   jsonResponse,
+  maybeStartPublisherBuild,
   MAX_CONTENT_BYTES,
   requestBody,
   requestHeader,
@@ -90,11 +91,14 @@ export const handler: Handler<
 
   try {
     const invalidation = await invalidateDynamicPaths(HOME_DYNAMIC_PATHS);
+    // During the rollout, also refresh the baked pages the off path serves.
+    const buildId = await maybeStartPublisherBuild();
     console.log(
       JSON.stringify({
         action: "content-updated",
         contentVersion: stored.VersionId,
         invalidationId: invalidation.invalidationId,
+        buildId,
         requestId: event.requestContext.requestId,
       }),
     );
@@ -103,6 +107,7 @@ export const handler: Handler<
       {
         contentVersion: stored.VersionId,
         invalidationId: invalidation.invalidationId,
+        ...(buildId === null ? {} : { buildId }),
         status: "published",
       },
       {

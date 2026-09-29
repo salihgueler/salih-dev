@@ -383,7 +383,12 @@ test("configures isolated talk functions, environments, and one-month logs", () 
       [
         "CONTENT_ALLOWED_CALLER_ARNS",
         "CONTENT_BUCKET_NAME",
-        ...(functionCase.publisher ? ["DISTRIBUTION_ID"] : []),
+        // The invalidating (publisher) functions carry the distribution id and,
+        // while the render rollout is active, the dual-write markers that let
+        // them also start the publisher build (render-rollout-flag, Part 2).
+        ...(functionCase.publisher
+          ? ["DISTRIBUTION_ID", "RENDER_ROLLOUT_ACTIVE", "PUBLISHER_PROJECT_NAME"]
+          : []),
       ].sort(),
     );
   }
@@ -528,7 +533,8 @@ test("grants each talk handler only its task-scoped actions and prefixes", () =>
     delivery,
     "/ContentApi/TalkUploadCompleteFunction/ServiceRole/DefaultPolicy/Resource",
   );
-  assert.equal(completion.length, 5);
+  // 5 PR #10 statements + the render-rollout dual-write StartBuild grant.
+  assert.equal(completion.length, 6);
   assertStatement(completion[0], ["s3:ListBucket"], "ContentBucket");
   assert.deepEqual(completion[0].Condition, {
     StringLike: {
@@ -555,12 +561,14 @@ test("grants each talk handler only its task-scoped actions and prefixes", () =>
     ["cloudfront:CreateInvalidation"],
     "distribution/",
   );
+  // render-rollout-flag dual write: StartBuild on the publisher project only.
+  assertStatement(completion[5], ["codebuild:StartBuild"], "Publisher");
 
   const records = policyStatements(
     delivery,
     "/ContentApi/TalkRecordsFunction/ServiceRole/DefaultPolicy/Resource",
   );
-  assert.equal(records.length, 4);
+  assert.equal(records.length, 5);
   assertStatement(records[0], ["s3:ListBucket"], "ContentBucket");
   assert.deepEqual(records[0].Condition, {
     StringLike: { "s3:prefix": ["talks/records/*"] },
@@ -576,6 +584,8 @@ test("grants each talk handler only its task-scoped actions and prefixes", () =>
     ["cloudfront:CreateInvalidation"],
     "distribution/",
   );
+  // render-rollout-flag dual write: StartBuild on the publisher project only.
+  assertStatement(records[4], ["codebuild:StartBuild"], "Publisher");
 
   const talkPolicies = [...start, ...completion, ...records];
   const serialized = JSON.stringify(talkPolicies);
@@ -684,7 +694,19 @@ test("adds a read-only render origin behind CloudFront for the dynamic routes", 
   assert.equal(render.Properties.Runtime, "nodejs24.x");
   assert.deepEqual(
     Object.keys(environmentVariables(render)).sort(),
-    ["CONTENT_BUCKET_NAME", "SALIH_DEV_SSR"],
+    [
+      // PR #10 base.
+      "CONTENT_BUCKET_NAME",
+      "SALIH_DEV_SSR",
+      // render-rollout-flag: the AppConfig flag coordinates, the extension
+      // prefetch path, the off-path site bucket, and the rollout marker.
+      "APPCONFIG_APPLICATION",
+      "APPCONFIG_ENVIRONMENT",
+      "APPCONFIG_PROFILE",
+      "AWS_APPCONFIG_EXTENSION_PREFETCH_LIST",
+      "RENDER_ROLLOUT_ACTIVE",
+      "SITE_BUCKET_NAME",
+    ].sort(),
   );
 
   // Read-only, least-privilege: GetObject + prefix-scoped ListBucket only, and
@@ -711,27 +733,57 @@ test("adds a read-only render origin behind CloudFront for the dynamic routes", 
       `render role must not have ${forbidden}`,
     );
   }
-  const listStatement = renderStatements.find((statement) =>
+  // The render role now has TWO ListBucket statements: the PR #10 content-bucket
+  // one (talk records/decks + posts) and the off-path SITE-bucket one (baked
+  // dynamic routes). Select the content-bucket one by its exact prefix set.
+  const listStatements = renderStatements.filter((statement) =>
     (typeof statement.Action === "string"
       ? [statement.Action]
       : (statement.Action as string[])
     ).includes("s3:ListBucket"),
   );
-  assert.ok(listStatement !== undefined);
-  assert.deepEqual(listStatement.Condition, {
-    StringLike: {
-      "s3:prefix": ["talks/records/*", "talks/decks/*", "posts/*"],
-    },
-  });
+  const contentListStatement = listStatements.find(
+    (statement) =>
+      JSON.stringify(statement.Condition) ===
+      JSON.stringify({
+        StringLike: {
+          "s3:prefix": ["talks/records/*", "talks/decks/*", "posts/*"],
+        },
+      }),
+  );
+  assert.ok(
+    contentListStatement !== undefined,
+    "the content-bucket ListBucket statement is present with its prefix scope",
+  );
+  // The off-path site-bucket ListBucket is scoped to the baked dynamic prefixes.
+  const offPathListStatement = listStatements.find(
+    (statement) =>
+      JSON.stringify(statement.Condition) ===
+      JSON.stringify({
+        StringLike: {
+          "s3:prefix": ["talks/*", "blog/*", "categories/*", "tags/*"],
+        },
+      }),
+  );
+  assert.ok(
+    offPathListStatement !== undefined,
+    "the off-path site-bucket ListBucket statement is present with its prefix scope",
+  );
 
   // The render role reads the site object, talk records and blog posts, and
-  // never a deck object (decks are served by CloudFront from the bucket).
-  const getStatement = renderStatements.find((statement) =>
-    (typeof statement.Action === "string"
-      ? [statement.Action]
-      : (statement.Action as string[])
-    ).includes("s3:GetObject"),
-  );
+  // never a deck object (decks are served by CloudFront from the bucket). The
+  // off path adds a SECOND GetObject on the site bucket; select the
+  // content-bucket statement by the one resource unique to it.
+  const getStatement = renderStatements.find((statement) => {
+    const actions =
+      typeof statement.Action === "string"
+        ? [statement.Action]
+        : (statement.Action as string[]);
+    return (
+      actions.includes("s3:GetObject") &&
+      JSON.stringify(statement.Resource).includes("site/content.v1.json")
+    );
+  });
   assert.ok(getStatement !== undefined);
   const getResources = JSON.stringify(getStatement.Resource);
   for (const allowed of ["site/content.v1.json", "talks/records/*", "posts/*"]) {
@@ -947,8 +999,10 @@ test("adds privacy-first analytics and low-cost monitoring", () => {
   delivery.resourceCountIs("AWS::CloudWatch::Dashboard", 1);
   delivery.resourceCountIs("AWS::Synthetics::Canary", 0);
 
-  // Build failure alarm plus CloudFront 4xx/5xx and two homepage-check alarms.
-  delivery.resourceCountIs("AWS::CloudWatch::Alarm", 5);
+  // Build failure alarm plus CloudFront 4xx/5xx and two homepage-check alarms
+  // (5), plus the two render-rollout alarms (render errors + p95 latency) that
+  // AppConfig watches as monitors during the rollout (7 total).
+  delivery.resourceCountIs("AWS::CloudWatch::Alarm", 7);
 
   // Selected log fields must exclude visitor identifiers.
   const deliveries = delivery.findResources("AWS::Logs::Delivery");

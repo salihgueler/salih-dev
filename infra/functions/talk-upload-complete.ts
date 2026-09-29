@@ -34,6 +34,7 @@ import {
   jsonResponse,
   logDeckValidation,
   logTalkStoreChange,
+  maybeStartPublisherBuild,
   MAX_JSON_BODY_BYTES,
   requestBody,
   requestBodyByteLength,
@@ -653,6 +654,8 @@ export const handler: Handler<
   }
 
   logStored(event, approvedState, invalidationId);
+  // During the rollout, also refresh the baked pages the off path serves.
+  const buildId = await maybeStartPublisherBuild();
   return jsonResponse(
     202,
     {
@@ -662,6 +665,7 @@ export const handler: Handler<
       byteLength: pendingContentLength,
       pageCount,
       invalidationId,
+      ...(buildId === null ? {} : { buildId }),
       ...(prospectiveRecordKey === null
         ? {}
         : {

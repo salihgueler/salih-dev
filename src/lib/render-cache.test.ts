@@ -15,6 +15,8 @@ import test from "node:test";
 import {
   DYNAMIC_CACHE_CONTROL,
   FAILURE_CACHE_CONTROL,
+  ROLLOUT_CACHE_CONTROL,
+  successCacheControl,
 } from "./render-cache.ts";
 
 /** Parses a Cache-Control value into a directive map (flags map to true). */
@@ -58,4 +60,15 @@ test("s-maxage sits within the render cache policy TTL bounds and under the stal
 test("the failure Cache-Control is no-store so the edge never caches an error", () => {
   assert.equal(FAILURE_CACHE_CONTROL, "no-store");
   assert.equal(directives(FAILURE_CACHE_CONTROL).get("no-store"), true);
+});
+
+test("the rollout Cache-Control is private, no-store so the flag decision runs per request", () => {
+  const d = directives(ROLLOUT_CACHE_CONTROL);
+  assert.equal(d.get("no-store"), true);
+  assert.equal(d.get("private"), true);
+});
+
+test("successCacheControl picks the rollout header while active and the edge header otherwise", () => {
+  assert.equal(successCacheControl(true), ROLLOUT_CACHE_CONTROL);
+  assert.equal(successCacheControl(false), DYNAMIC_CACHE_CONTROL);
 });

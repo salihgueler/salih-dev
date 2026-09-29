@@ -14,9 +14,16 @@ import {
 import { markdownResponse } from "./lib/http";
 import { markdownForPath } from "./lib/markdown-documents";
 import {
-  DYNAMIC_CACHE_CONTROL,
   FAILURE_CACHE_CONTROL,
+  successCacheControl,
 } from "./lib/render-cache";
+import { getRenderFlag } from "./lib/flags";
+import {
+  RENDER_PATH_HEADER,
+  RENDER_PATH_LAMBDA,
+  serveBakedPage,
+} from "./lib/off-path-render";
+import { resolveVid } from "./lib/vid-cookie";
 import {
   resolvePublishedPostsFromS3,
   resolvePublishedTalksFromS3,
@@ -81,10 +88,18 @@ function s3(): S3Client {
  * Astro virtual-module graph this middleware pulls in.
  */
 
-/** Returns a copy of the response carrying the dynamic-route Cache-Control. */
-function withDynamicCacheControl(response: Response): Response {
+/**
+ * Copies a response, applying the rollout success Cache-Control, the
+ * `x-render-path: lambda` marker, and the freshly minted `vid` cookie when one
+ * is needed. Used on the on path (an Astro render).
+ */
+function decorateOnPath(response: Response, setCookie: string | null): Response {
   const headers = new Headers(response.headers);
-  headers.set("Cache-Control", DYNAMIC_CACHE_CONTROL);
+  if (response.status < 500) {
+    headers.set("Cache-Control", successCacheControl());
+  }
+  headers.set(RENDER_PATH_HEADER, RENDER_PATH_LAMBDA);
+  if (setCookie !== null) headers.append("Set-Cookie", setCookie);
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
@@ -154,6 +169,41 @@ async function renderDynamic(
     return failure(500, "render configuration error");
   }
 
+  // Resolve the visitor id and read the rollout flag. Any flag-read failure
+  // returns false (the off path), which is the safe, known-good behaviour.
+  const { vid, setCookie } = resolveVid(
+    context.request.headers.get("Cookie"),
+  );
+  const flagOn = await getRenderFlag(vid);
+
+  // Off path: serve the baked static page the publisher already produced for
+  // this route from the site bucket, with the same headers as today plus the
+  // `x-render-path: static` marker and the vid cookie when freshly minted.
+  if (!flagOn) {
+    const siteBucket = process.env.SITE_BUCKET_NAME;
+    if (siteBucket === undefined || siteBucket === "") {
+      return failure(500, "render configuration error");
+    }
+    const baked = await serveBakedPage(
+      s3(),
+      siteBucket,
+      context.url.pathname,
+      successCacheControl(),
+    );
+    if (setCookie !== null && baked.status < 500) {
+      const headers = new Headers(baked.headers);
+      headers.append("Set-Cookie", setCookie);
+      return new Response(baked.body, {
+        status: baked.status,
+        statusText: baked.statusText,
+        headers,
+      });
+    }
+    return baked;
+  }
+
+  // On path: render through Astro exactly as PR #10 does, reading the route's
+  // content from S3 inside the request-scoped overrides.
   const today =
     process.env.SITE_CONTENT_TODAY ?? new Date().toISOString().slice(0, 10);
 
@@ -195,7 +245,7 @@ async function renderDynamic(
     return failure(rendered.status, "render error");
   }
 
-  return withDynamicCacheControl(rendered);
+  return decorateOnPath(rendered, setCookie);
 }
 
 /** Adds the representation and security headers the dev preview advertises. */
