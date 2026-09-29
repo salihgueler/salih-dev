@@ -90,8 +90,8 @@ export async function invalidateDynamicPaths(
  *
  * It is best-effort and never fails the write: the invalidation already made the
  * on-path change live, and a missed publisher build only delays the off-path
- * baked page until the next build. The returned `buildId` is for logging; the
- * write's response contract is unchanged (it still reports `invalidationId`).
+ * baked page until the next build. The returned `buildId` is logged and added to
+ * the write's response when a build started; `invalidationId` is always there.
  */
 export async function maybeStartPublisherBuild(): Promise<string | null> {
   if (process.env.RENDER_ROLLOUT_ACTIVE !== "1") return null;
