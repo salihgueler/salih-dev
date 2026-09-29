@@ -1,8 +1,10 @@
 /**
  * Per-route prerender flag for the backend-served-content dynamic routes.
  *
- * The four dynamic routes (`/`, `/index.md`, `/talks/`, `/talks/index.md`)
- * declare their prerender mode with the exact sentinel line
+ * The sixteen dynamic route files (home, Talks, the blog index, posts,
+ * categories and tags, each with its `.md` alternate, plus `rss.xml`,
+ * `sitemap.xml`, `llms.txt` and `llms-full.txt`) declare their prerender mode
+ * with the exact sentinel line
  *
  *   export const prerender = PRERENDER_DYNAMIC_ROUTE;
  *

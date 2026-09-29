@@ -20,8 +20,9 @@
  * intact.
  *
  * The SSR build sets `SALIH_DEV_SSR=1`, which (a) adds the Node adapter in the
- * Astro config and (b) flips the four dynamic routes' `prerender` flag to false
- * so only they are served on request; every other route is still prerendered
+ * Astro config and (b) flips the sixteen dynamic route files' `prerender` flag
+ * to false so only they are served on request; every other route is still
+ * prerendered
  * into `client/` and served from S3 by the static publisher.
  *
  * Usage: node scripts/build-render-lambda.mjs <outDir>
@@ -133,8 +134,8 @@ function releaseLock() {
 acquireLock();
 
 // Read and validate EVERY route first, before patching any, so a missing
-// sentinel aborts the run with the whole tree still intact. Only once all four
-// are known good does the patch loop run, and `restoreRoutes` (in the finally
+// sentinel aborts the run with the whole tree still intact. Only once every one
+// is known good does the patch loop run, and `restoreRoutes` (in the finally
 // below) undoes exactly the ones actually patched — so a crash mid-build, or a
 // SIGKILL, can never leave a route stuck at the SSR literal and break the
 // static build. The lock serialises concurrent CDK synths against the same tree.

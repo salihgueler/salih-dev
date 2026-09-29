@@ -5,8 +5,10 @@
  *
  * This handler is the CloudFront render origin. It wraps the Astro SSR server
  * built by the official `@astrojs/node` adapter (middleware mode) and serves the
- * four dynamic routes — `/`, `/index.md`, `/talks/`, `/talks/index.md` — on
- * request. The Astro middleware bundled into that server reads the content
+ * dynamic routes on request: home, `/talks/`, the blog index, posts, categories
+ * and tags (each with its `.md` alternate), `rss.xml`, `sitemap.xml`,
+ * `llms.txt` and `llms-full.txt`. The Astro middleware bundled into that
+ * server reads the content
  * bucket and renders the same `.astro` pages the static build uses, so the
  * request-time output matches the baked output for the same content while a
  * content write goes live in seconds through a scoped CloudFront invalidation.
@@ -19,8 +21,9 @@
  * bundling step, so the import is resolved from the deployment package.
  *
  * It is strictly read-only. The S3 reads live in the bundled Astro middleware
- * and use only `s3:GetObject` on the content object and the talk prefixes plus
- * prefix-scoped `s3:ListBucket`. This handler performs no AWS call itself.
+ * and use only `s3:GetObject` on the site content object, `talks/records/` and
+ * `posts/`, plus `s3:ListBucket` scoped to `talks/records/`, `talks/decks/` and
+ * `posts/`. This handler performs no AWS call itself.
  */
 
 import { EventEmitter } from "node:events";

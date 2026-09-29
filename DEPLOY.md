@@ -186,13 +186,19 @@ aws cloudwatch describe-alarms \
   --region us-east-1
 ```
 
-Manually rerun synchronization:
+Manually rerun the DEV import (it writes `posts/` and `images/` to the content
+bucket and invalidates the blog routes, with no site build). The project has a
+generated name, so look it up first:
 
 ```sh
-aws codebuild start-build --project-name <publisher-project-name>
+aws codebuild list-projects --query "projects[?contains(@, 'DevImporter')]"
+aws codebuild start-build --project-name <dev-importer-project-name>
 ```
 
-Inspect the scheduler DLQ and CodeBuild logs when a publication alarm fires.
+Rerun the publisher with `PublisherProjectName` only for a code or design
+change. Inspect the scheduler DLQ and `/aws/codebuild/salih-dev-dev-importer`
+when the import alarm fires, and `/aws/codebuild/salih-dev-publisher` for a
+failed publish.
 Rollback site content by restoring a previous S3 object version or publishing
 a previously verified source revision. Route 53 and retained buckets remain
 protected; deleting a CDK stack does not delete retained content.
@@ -320,7 +326,7 @@ root-ARN allowlist used by `/v1/content`:
 | Method and route                             | Purpose                                                                             |
 | -------------------------------------------- | ----------------------------------------------------------------------------------- |
 | `POST /v1/talks/uploads`                     | Validate an optional talk record, stage the request, and issue one PDF upload grant |
-| `POST /v1/talks/uploads/{deckId}/completion` | Validate the transferred PDF, store approved state, and start publication           |
+| `POST /v1/talks/uploads/{deckId}/completion` | Validate the transferred PDF, store approved state, and invalidate the Talks routes  |
 | `GET /v1/talks/records`                      | List API-authored records and their current ETag versions; never return deck bytes  |
 | `DELETE /v1/talks/records/{recordKey}`       | Conditionally remove one API-authored record and its approved deck                  |
 
@@ -439,14 +445,17 @@ precondition_required`: refresh the record list and restart with the current
   conditional record write prevents replacing a newer version. If the record is
   present or retry returns `pending_deck_not_found`, do not start another upload
   blindly—publication or cleanup may be the only remaining operation.
-- `503 publication_not_started`: the response identifies state that was already
-  stored. Do not repeat completion. Start the publisher manually with the
-  returned/stored identifiers, or allow the next scheduled publication to use
-  that state.
+- `503 invalidation_not_started`: the response identifies state that was already
+  stored. Do not repeat completion. Clear the Talks routes by hand with
+  `aws cloudfront create-invalidation --distribution-id <DistributionId> --paths
+"/talks/" "/talks/index.md" "/sitemap.xml" "/llms.txt" "/llms-full.txt"`, or
+  wait up to five minutes for the cached pages to expire.
 
-A publisher validation failure leaves the stored API record unchanged and the
-previously published site live. Fix it through a conditional replacement or
-removal, then publish again; do not bypass or weaken validation.
+The render origin validates every API record on each request with the same
+validators the build uses. A stored record that fails validation makes the
+Talks routes return an uncached 502 while CloudFront keeps serving the last good
+page for up to 24 hours. Fix it through a conditional replacement or removal;
+do not bypass or weaken validation.
 
 ### Replace or remove a record
 
@@ -486,7 +495,8 @@ curl --fail-with-body \
 ```
 
 Removal deletes the current API record and its associated approved deck, then
-starts exactly one build; an already-absent deck is tolerated. Missing intent or
+issues one scoped CloudFront invalidation of the Talks routes; an already-absent
+deck is tolerated. Missing intent or
 precondition returns `428`, a malformed value returns `400`, a stale ETag
 returns `412`, and a missing record returns `404`. Repository-authored talks
 cannot be removed through this API and return `409 repository_authored_talk`.
@@ -500,22 +510,25 @@ API.
 Approved API records and decks live under `talks/records/` and `talks/decks/` in
 the existing private, TLS-only, SSE-S3 encrypted, versioned, retained content
 bucket. Abandoned staged requests and deck bytes under `talks/pending/` expire
-after one day. The publisher synchronizes records and decks into separate local
-caches with deletion enabled, then `npm run materialize:talks` clears and
-recreates only `src/content/talks/api/` and `public/talks/slides/api/`. Records
+after one day. The render origin reads `talks/records/` and the key-only
+`talks/decks/` listing on each request and never downloads a deck; visitors get
+decks straight from `talks/decks/` at `/talks/slides/api/<deckId>.pdf`. Records
 without an available approved deck and unreferenced decks do not enter the
-snapshot. The caches and retained store are read-only to materialization, while
-Git-authored records and tracked slides remain unchanged.
-
-After materialization the publisher runs DEV import, tests, Astro/type checks,
-the static build, and strict build verification. Only a successful gate may sync
-`dist/` to the website bucket and invalidate CloudFront. The Talks HTML,
-Markdown alternate, sitemap, and LLM indexes continue to come from one validated
 snapshot.
+
+The static build still materializes talks for the baked pages. The publisher
+synchronizes records and decks into separate local caches with deletion
+enabled, then `npm run materialize:talks` clears and recreates only
+`src/content/talks/api/` and `public/talks/slides/api/`. The caches and retained
+store are read-only to materialization, while Git-authored records and tracked
+slides remain unchanged. The publisher then runs DEV import, tests, Astro/type
+checks, the static build, and strict build verification. Only a successful gate
+may sync `dist/` to the website bucket and invalidate CloudFront.
 
 Authorization, deck-validation, and store-change logs are retained for one
 month and contain only their action-specific request ID, caller authorization,
-derived storage key, byte/page facts, stored version, and build ID fields. They
+derived storage key, byte/page facts, stored version, and invalidation ID
+fields. They
 exclude request/PDF/rendered content, IP and forwarded IP, cookies, query
 strings, user agents, referrers, and browser or device identifiers.
 

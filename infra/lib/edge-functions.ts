@@ -113,9 +113,10 @@ function serializeQuery(query) {
   return parts.length ? "?" + parts.join("&") : "";
 }
 
-// The render origin serves the four dynamic routes with Astro SSR. Unlike the
+// The render origin serves the dynamic routes with Astro SSR. Unlike the
 // S3 origin's function, this one never appends "/index.html": it keeps the
-// clean route path the SSR server matches (/ and /talks/), and only negotiates
+// clean route path the SSR server matches (/, /talks/, /blog/ and the post,
+// category and tag paths), and only negotiates
 // the Markdown alternate (/index.md, /talks/index.md, /blog/index.md, and the
 // /blog|categories|tags/<slug>.md forms). The www redirect is kept so both
 // origins behave the same for a www visitor.

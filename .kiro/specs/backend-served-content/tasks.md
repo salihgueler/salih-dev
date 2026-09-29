@@ -14,7 +14,7 @@ Serve every page whose content lives in the content bucket from a read-only Rend
   - [x] 1.5 `src/lib/render-content.ts` reads `site/content.v1.json`, `talks/records/`, the `talks/decks/` key listing and `posts/` from S3. It never downloads a deck and never falls back to repo content.
 
 - [x] 2. Dynamic routes
-  - [x] 2.1 17 route files use `export const prerender = PRERENDER_DYNAMIC_ROUTE`; `infra/scripts/build-render-lambda.mjs` validates every sentinel before patching, patches them to `false` for the SSR build only, restores them afterwards, and holds a lock so concurrent builds cannot interleave.
+  - [x] 2.1 16 route files use `export const prerender = PRERENDER_DYNAMIC_ROUTE`; `infra/scripts/build-render-lambda.mjs` validates every sentinel before patching, patches them to `false` for the SSR build only, restores them afterwards, and holds a lock so concurrent builds cannot interleave.
   - [x] 2.2 `src/middleware.ts` loads what each route needs (site content for every route, posts for home/blog/listings, talks for Talks and listings). Any read failure, including a missing `site/content.v1.json`, returns a `no-store` 502.
   - [x] 2.3 `blog/[slug].astro` renders the build-time `render()` output in the static build and the request-time compiled HTML in the SSR build; an unknown slug is a 404.
 

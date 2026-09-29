@@ -3,9 +3,10 @@
  *
  * Feature: backend-served-content
  *
- * This module reads the mutable content the four dynamic routes need — the site
- * content object for the home page's location and events, and the approved talk
- * records for the Talks archive — from the content bucket at request time, and
+ * This module reads the mutable content the dynamic routes need — the site
+ * content object for the location and events, the approved talk records for the
+ * Talks archive, and the posts under `posts/` for the blog and the listings —
+ * from the content bucket at request time, and
  * turns them into the request-scoped overrides the shared config and gateway
  * read through. Deck bytes are never read here: deck presence is decided from a
  * key-only listing of `talks/decks/`, and the decks are served to visitors

@@ -2,15 +2,24 @@
 
 ## Architecture decision
 
-The site is deployed as a static Astro build because its pages are public,
-content changes at most daily, and no request-specific rendering is required.
-This avoids a permanently running server, container hosting, Lambda cold starts,
-and runtime Markdown processing.
+The site started as a static Astro build because its pages are public and
+content changed at most daily. Pages whose content lives in the retained
+content bucket (home, Talks, the blog index, posts, categories, tags, and the
+machine-readable listings) now render on request in a read-only Lambda, so a
+content change goes live in seconds without a site build. About, Contact, the
+404 page, the skills pages, the API catalog and the assets stay static. The
+render path adds Lambda cold starts and runtime Markdown processing to those
+routes; a 5-minute edge cache and a 24-hour `stale-if-error` window limit both.
 
 The architecture uses:
 
 - Amazon S3 for a private website origin.
 - Amazon CloudFront with origin access control for HTTPS delivery.
+- A read-only arm64 render Lambda, reached only through CloudFront by a
+  Function URL with origin access control, for the request-time routes.
+- Two prefix-scoped CloudFront origins on the content bucket for
+  `/talks/slides/api/*` (from `talks/decks/`) and `/images/blog/*` (from
+  `images/`).
 - CloudFront Functions for clean URLs, the `www` redirect, and Markdown content
   negotiation.
 - AWS Certificate Manager for the `salih.dev` and `www.salih.dev` certificate.
@@ -22,8 +31,9 @@ The architecture uses:
   for upload grants, completion, record listing, and conditional removal. It
   adds no public editor, hosted login, long-lived key, or visitor-facing upload
   surface.
-- AWS CodeBuild with Lambda compute for synchronization, API talk
-  materialization, validation, and static builds.
+- AWS CodeBuild with Lambda compute for the daily import-only `DevImporter`
+  and for on-demand publisher builds (API talk materialization, validation, and
+  static builds) after code or design changes.
 - Amazon EventBridge Scheduler for the daily trigger.
 - Amazon SQS as the scheduler dead-letter queue.
 - CloudWatch and Amazon SNS for build, availability, and error-rate alarms,
@@ -38,14 +48,20 @@ The architecture uses:
   selected fields omit IP addresses, cookies, query strings, user agents, and
   full referrers.
 
-This design has no container or server in the website serving path. CodeBuild
-uses short-lived AWS Lambda compute for build automation.
+This design has no container or long-running server in the website serving
+path. CodeBuild uses short-lived AWS Lambda compute for import and build
+automation.
 
 ## Daily DEV synchronization
 
-**Trigger:** EventBridge Scheduler invokes CodeBuild `StartBuild` every day at
-03:15 UTC. Scheduler uses at-least-once delivery, retries twice for up to one
-hour, and sends undeliverable events to an encrypted SQS dead-letter queue.
+**Trigger:** EventBridge Scheduler invokes CodeBuild `StartBuild` on the
+import-only `DevImporter` project every day at 03:15 UTC. Scheduler uses
+at-least-once delivery, retries twice for up to one hour, and sends
+undeliverable events to an encrypted SQS dead-letter queue. The import writes
+only the content bucket and invalidates `/`, `/index.md`, `/blog/*`,
+`/categories/*`, `/tags/*`, `/rss.xml`, `/sitemap.xml`, `/llms.txt`,
+`/llms-full.txt` and `/images/blog/*`. It never builds the site or writes the
+site bucket.
 
 **Fetch logic:** The build downloads the versioned synchronization manifest,
 normalized Markdown, and existing banners from the private content bucket. The
@@ -64,12 +80,14 @@ no runtime dependency on DEV.
 
 **Storage:**
 
-- `s3://<content-bucket>/posts/`: normalized Markdown source.
-- `s3://<content-bucket>/images/`: durable banner copies.
+- `s3://<content-bucket>/posts/`: normalized Markdown source, read by the render
+  Lambda on each request.
+- `s3://<content-bucket>/images/`: durable banner copies, served at
+  `/images/blog/*`.
 - `s3://<content-bucket>/state/dev-sync-manifest.json`: article IDs, edit
   versions, slugs, and banner filenames.
-- `s3://<site-bucket>/`: generated HTML, Markdown representations, discovery
-  documents, CSS, and public banner copies.
+- `s3://<site-bucket>/`: the publisher's generated HTML, Markdown
+  representations, discovery documents, and CSS for the static routes.
 
 **Talk API storage and publication:** The root-only `AWS_IAM` content API
 accepts an optional validated talk metadata payload and issues a presigned POST
@@ -88,7 +106,16 @@ repository records or Git-tracked slides. A Git/API canonical-identity or slide
 collision fails the build with repository content authoritative and the API
 record named for remediation.
 
-**Publisher materialization:** Before validation, CodeBuild synchronizes
+**Request-time talks:** The render Lambda reads `talks/records/` and the
+key-only `talks/decks/` listing on each request, validates the deck-present
+records with the build's validators, and renders the Talks routes and listings
+from that snapshot. It never downloads a deck. Accepted completion or removal
+issues one scoped CloudFront invalidation instead of a build; if the
+invalidation fails to start, the API returns `invalidation_not_started`
+identifying the stored state.
+
+**Publisher materialization:** The on-demand publisher still bakes the static
+pages. Before validation, CodeBuild synchronizes
 `talks/records/` and `talks/decks/` with deletion enabled into separate caches.
 `npm run materialize:talks` then clears and rebuilds only
 `src/content/talks/api/` and `public/talks/slides/api/`, including exactly records
@@ -97,9 +124,7 @@ mutate Git-authored content, or include pending/orphaned data. CodeBuild next
 runs DEV import, tests, Astro/type checks, static generation, and strict static
 verification. The `CODEBUILD_BUILD_SUCCEEDING` gate prevents every website sync
 and CloudFront invalidation after failure, preserving both stored API state and
-the previously published site. Accepted completion/removal starts one build;
-if that start fails, the API returns `publication_not_started` identifying the
-retained state for a later scheduled or manual build.
+the previously published static pages.
 
 After synchronization and materialization, CodeBuild runs tests and Astro
 diagnostics, builds the site, updates the website bucket, and invalidates
@@ -242,8 +267,9 @@ Pricing references:
   refreshes. They have no public endpoint, query only the privacy-filtered table,
   and request Athena result reuse for one hour; dashboard viewers need explicit
   `lambda:InvokeFunction` permission for the widget function.
-- AWS WAF is not provisioned because the origin is private and the site has no
-  dynamic request-processing backend.
+- AWS WAF is not provisioned. The site and content buckets are private, and the
+  render Lambda is read-only, GET/HEAD-only, and reachable only through
+  CloudFront.
 - CodeBuild uses AWS-managed encryption instead of a customer-managed KMS key,
   avoiding an additional recurring key charge.
 - The current `aws-cdk-lib@2.262.1` package bundles
