@@ -130,3 +130,18 @@ The published Talks archive may be empty. This feature changes how content is se
 4. THE work SHALL make no commit, push, pull request, `cdk deploy`, or any other AWS mutation, and SHALL use read-only AWS access only where genuinely required.
 5. THE work SHALL pass the existing gates: root `npm test`, `npm run check`, `npm run build`, `npm run verify:build`, the infra tests, and `cdk synth`, including the root test and build with `infra/` moved aside.
 6. THE Render_Function's request-time behavior SHALL be proven locally against the real Lambda Node 24 arm64 runtime image before the feature is considered complete, with no network access and stubbed content.
+
+### Requirement 8: Reach visitors gradually behind a feature flag
+
+**User Story:** As the Author, I want the request-time path to reach visitors in steps and roll back without a deploy, so that a defect in it cannot take down the whole site at once.
+
+#### Acceptance Criteria
+
+1. THE request-time path SHALL be gated by the AppConfig feature flag `renderFromBackend`, deployed as off, so a deploy changes nothing a Visitor sees.
+2. WHILE the flag is off for a Visitor, THE Render_Function SHALL serve the baked Static_Route page for the requested Dynamic_Route from the Site_Bucket, byte-identical to the static build.
+3. THE Render_Function SHALL treat a failed, non-200, malformed or slower-than-300-ms flag read as off.
+4. THE Render_Function SHALL identify each Visitor by a random first-party `vid` cookie (`Secure`, `HttpOnly`, `SameSite=Lax`), and THE Distribution SHALL forward only that cookie to the Dynamic_Origin.
+5. THE flag SHALL support targeting one Visitor (`in $vid`) and a consistent percentage of Visitors (`split by::$vid`), set as flag deployments without a CDK deploy.
+6. IF a flag-on request's content read, validation or render fails with a 5xx, THEN THE Render_Function SHALL serve the baked page and log the failure so a CloudWatch alarm counts it.
+7. THE flag's deployments SHALL be monitored by alarms on Render_Function errors, p95 duration and handled render failures, so AppConfig rolls a deployment back when one fires.
+8. WHILE the rollout is active, Dynamic_Route responses SHALL NOT be cached at the edge or in the browser, and content writes and the daily import SHALL also start the Publisher so the baked pages stay current.

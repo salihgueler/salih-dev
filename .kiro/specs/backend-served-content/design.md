@@ -158,6 +158,8 @@ No new persistent data. The Render Lambda reads existing objects:
 
 ## Error handling
 
+During the `renderFromBackend` rollout (see "Rollout flag" below), every case in this list that ends in a 5xx on a flag-on request is served the baked page from the site bucket instead, and logs `on_path_fallback`. The list describes the behavior once the flag is removed.
+
 - Missing `site/content.v1.json`: a read failure. The middleware returns a `no-store` 502 and CloudFront keeps serving the last good page through `stale-if-error`. Request-time rendering never uses the packaged defaults.
 - Missing talks prefix or empty: render the approved empty archive.
 - S3 `AccessDenied` masking a missing key: prevented by prefix-scoped `ListBucket`, so absence is a clean not-found.
@@ -182,3 +184,45 @@ Deployment is a separate, explicitly approved step. The expected `cdk diff` shap
 - **Changed**: the CloudFront distribution (origins + behaviors), the three write Lambda roles (StartBuild → CreateInvalidation) and their code assets, the daily schedule's target (publisher → `DevImporter`), the state stack's content-bucket policy (two CloudFront read statements scoped to `talks/decks/*` and `images/*`), the publisher buildspec (optional materialize steps), and `verify-static-build.mjs`.
 - **Removed**: `codebuild:StartBuild` statements from the three write functions' policies.
 - **Replaced**: none expected (the distribution is updated in place; buckets and the hosted zone are retained).
+
+The rollout flag (next section) adds the AppConfig application, environment, profile, hosted configuration, deployment strategy and its deployment, three alarms, a metric filter, the auto-generated alarm-read role, the AppConfig Agent layer on the render Lambda, two CloudFront policies, and `codebuild:StartBuild` back on the three write functions while `rolloutActive` is true.
+
+## Rollout flag
+
+Moving every content page from S3 to a Lambda is a large change to how the live site serves traffic, so the request-time path ships behind an AppConfig feature flag and reaches visitors in steps. `DEPLOY.md` section 11 is the runbook.
+
+### Control plane
+
+`infra/lib/feature-flags.ts` creates the AppConfig application `salih-dev`, the environment `production`, the feature-flag profile `render-flags` holding one flag, `renderFromBackend`, deployed as off, and the deployment strategy `salih-dev-render-rollout` (linear, 25% growth over 20 minutes, 10-minute final bake). Targeting and percentage rules are set on the deployed flag as flag deployments, so a rollout step is never a CDK deploy.
+
+Three CloudWatch alarms are monitors on the environment, so AppConfig rolls a flag deployment back if one fires during the deployment or its bake:
+
+- Lambda `Errors` of at least one in a minute.
+- p95 duration of 5 seconds or more for three minutes.
+- `RenderFailures`: a metric filter on the render log group counting the `on_path_fallback`, `render_error`, `middleware_error` and `load_error` outcomes. Handled failures return a response, so they never reach the `Errors` metric.
+
+### Request path
+
+- The render Lambda carries the arm64 AppConfig Agent extension (ARN resolved by `appconfig.Application.getLambdaLayerVersionArn`) with `AWS_APPCONFIG_EXTENSION_PREFETCH_LIST` set to the flag's configuration path, and `appconfig:StartConfigurationSession`/`GetLatestConfiguration` scoped to that application.
+- `src/lib/vid-cookie.ts` resolves the visitor id from the `vid` cookie and mints a random UUID cookie (`Max-Age=31536000; Path=/; Secure; HttpOnly; SameSite=Lax`) when it is missing. CloudFront forwards only `vid` and `Accept` to the render origin.
+- `src/lib/flags.ts` reads `renderFromBackend` from `localhost:2772` with `Context: vid=<id>` and reads `enabled` under the flag key. An error, a non-200 status, a malformed body or a 300 ms timeout returns false.
+- Flag off: `src/lib/off-path-key.ts` maps the route to its baked key in the site bucket (`/` to `index.html`, `/talks/` to `talks/index.html`, and so on) and `src/lib/off-path-render.ts` serves it with today's headers. The render role gets `s3:GetObject` on exactly those keys.
+- Flag on: the existing Astro render. A content read, validation or render that fails with a 5xx falls back to the same baked page and logs `on_path_fallback`. A 4xx passes through.
+- Every response carries `x-render-path: lambda` or `x-render-path: static`.
+
+### While the rollout is active
+
+`RENDER_ROLLOUT_ACTIVE=1` on the render Lambda, the three write functions (`rolloutActive: true` on `ContentApi`) and the `DevImporter`:
+
+- Render responses send `private, no-store`, and the render behavior uses a cache policy with a zero default TTL and a one-second max TTL, with the cookie kept out of the cache key. `DYNAMIC_CACHE_CONTROL` stays in code for flag removal.
+- Content writes and the daily import also start the publisher, so the baked pages stay current. Write responses add `buildId` when the build started; the start is best-effort and never fails the write.
+
+### Decisions
+
+- No CloudFront origin-group failover. Failover sends the S3 origin the same clean URI (`/talks/`) while S3 holds `talks/index.html`, and CloudFront Functions only run on viewer events, so they cannot rewrite the failover request. Lambda@Edge could, and was left out as a second function to own. The in-Lambda fallback covers read and render failures; a render Lambda that fails to start is not covered and is caught by the deploy itself, since with the flag off the Lambda already serves every dynamic route.
+- No cookie-keyed cache during the rollout. A visitor pinned to a cached variant would not move on rollback.
+- No `Entity-Id` header yet. Deployments spread across Lambda execution environments, so a visitor can see either flag version while a deployment is in progress.
+
+### Removal
+
+At 100% with no alarm: delete the flag read and the off path, drop `RENDER_ROLLOUT_ACTIVE` and set `rolloutActive: false`, restore the original render cache policy, and remove the baked-page grant and the extension. The `vid` cookie and the AppConfig application stay only if the homepage A/B test uses them.

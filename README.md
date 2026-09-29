@@ -8,6 +8,11 @@ listings) render on request in a Lambda from that content, so content changes
 go live within seconds with no site build. About, Contact and the remaining
 pages are static.
 
+Request-time rendering ships behind the AppConfig feature flag
+`renderFromBackend`. While the flag is off for a visitor, the Lambda serves the
+page the static build baked into S3 instead. `DEPLOY.md` section 11 has the
+rollout, rollback and flag-removal steps.
+
 ## Requirements
 
 - Node.js 22.12 or newer
@@ -102,8 +107,10 @@ validated snapshot for `/talks/`, `/talks/index.md`, `/sitemap.xml`, `/llms.txt`
 and `/llms-full.txt`. If sources conflict, repository content is authoritative
 and the API record must be removed or replaced. A failed build leaves stored API
 state unchanged and preserves the previously published static pages. At request
-time, an API record that fails validation makes the Talks routes return an
-uncached 502 while CloudFront keeps serving the last good page. The collection is
+time, an API record that fails validation makes the Talks routes fall back to
+the baked page during the flag rollout (and trips the `RenderFailures` alarm),
+and return an uncached 502 once the flag is removed, while CloudFront keeps
+serving the last good page. The collection is
 intentionally empty until the Author supplies a talk through one of these two
 workflows.
 
@@ -126,8 +133,11 @@ Current location and conference events use the versioned schema in
 `src/config/site-content.default.json`; the live site reads
 `site/content.v1.json` from the retained content bucket on each request. The
 IAM-authenticated content API updates that object and invalidates every dynamic
-route, so content changes need no build and no CDK deployment. If the object is
-missing, every dynamic route returns an uncached 502 rather than falling back to
+route, so content changes need no build and no CDK deployment. During the flag
+rollout the write also starts the publisher, so the baked pages stay current.
+If the object is missing, a flag-on request falls back to the baked page and
+trips the `RenderFailures` alarm; once the flag is removed, every dynamic route
+returns an uncached 502 rather than falling back to
 the default file. The API uses an exact root-ARN allowlist
 for this personal account and has no public or alternate editor identity.
 
@@ -162,7 +172,9 @@ The CDK application in `infra/` defines two stacks:
 - `SalihDevState`: retained, versioned content storage and the Route 53 zone.
 - `SalihDevDelivery`: private website storage, CloudFront, ACM, Route 53 aliases,
   a read-only render Lambda (a second CloudFront origin behind a Function URL
-  with Origin Access Control), deck and image origins on the content bucket,
+  with Origin Access Control) with the AppConfig Agent extension, the
+  `renderFromBackend` AppConfig application and its three rollback alarms,
+  deck and image origins on the content bucket,
   on-demand CodeBuild publication for code and design changes, an
   IAM-authenticated content API, the daily `DevImporter`, alarms, and
   analytics.

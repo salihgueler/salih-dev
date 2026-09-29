@@ -32,3 +32,13 @@ Serve every page whose content lives in the content bucket from a read-only Rend
   - [x] 5.1 Root: `npm test` 81/81, `npm run check` 0 errors, `npm run build` 79 pages, `npm run verify:build`. Same with `infra/` moved aside.
   - [x] 5.2 Infra: `tsc`, `npm test` 50/50, `cdk synth --strict` clean (15 cache behaviors).
   - [x] 5.3 Lambda image (`public.ecr.aws/lambda/nodejs:24`, arm64, `--network none`, stubbed S3): all 16 dynamic routes return 200 with the right content type and are byte-identical to the static build; all 21 posts are byte-identical; an unknown post is 404; a missing site object and an S3 outage both return a `no-store` 502.
+
+- [x] 6. Rollout flag (branch `feat/render-rollout-flag`, merged into this branch)
+  - [x] 6.1 `infra/lib/feature-flags.ts`: AppConfig application, `production` environment, `render-flags` profile with `renderFromBackend` off, linear strategy with a 10-minute final bake, and the Errors, p95 and `RenderFailures` alarms as monitors.
+  - [x] 6.2 Render Lambda: arm64 AppConfig Agent layer, prefetch list, scoped AppConfig read IAM, and `s3:GetObject` on the baked dynamic-route keys in the site bucket.
+  - [x] 6.3 `src/lib/flags.ts`, `vid-cookie.ts`, `off-path-key.ts`, `off-path-render.ts` and the middleware branch: flag off or a flag-on 5xx serves the baked page; `x-render-path` on every response.
+  - [x] 6.4 CloudFront: `vid`-only origin request policy and a no-cache render policy during the rollout.
+  - [x] 6.5 Dual writes gated on `RENDER_ROLLOUT_ACTIVE`: content/talk writes and the `DevImporter` also start the publisher.
+  - [x] 6.6 Verification: root `npm test` 112/112, infra 59/59, `cdk synth --strict`; Lambda image proof of flag on, flag off, extension down, cookie minting and a flag-on read failure.
+  - [ ] 6.7 Deploy with the flag off, then roll out per `DEPLOY.md` section 11.
+  - [ ] 6.8 Remove the flag at 100%.

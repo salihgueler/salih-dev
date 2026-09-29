@@ -224,8 +224,16 @@ protected; deleting a CDK stack does not delete retained content.
 > blog routes, also without a site build. The publisher is now only for code and
 > design changes; start it manually.
 >
+> While the `renderFromBackend` rollout is in place (section 11), the render
+> Lambda serves the baked page from the site bucket to every visitor the flag
+> is off for, and the write paths and the `DevImporter` also start the
+> publisher so those baked pages stay current. Write responses then include a
+> `buildId` next to the `invalidationId`.
+>
 > `site/content.v1.json` must exist before this is deployed. If it is missing,
-> every dynamic route returns an uncached 502 instead of falling back to repo
+> a flag-on request falls back to the baked page and logs `on_path_fallback`,
+> which trips the `RenderFailures` alarm. Once the flag is removed, every
+> dynamic route returns an uncached 502 instead of falling back to repo
 > content.
 
 
@@ -452,7 +460,9 @@ precondition_required`: refresh the record list and restart with the current
   wait up to five minutes for the cached pages to expire.
 
 The render origin validates every API record on each request with the same
-validators the build uses. A stored record that fails validation makes the
+validators the build uses. During the flag rollout, a stored record that fails
+validation makes a flag-on Talks request fall back to the baked page and trips
+the `RenderFailures` alarm (section 11). Once the flag is removed, it makes the
 Talks routes return an uncached 502 while CloudFront keeps serving the last good
 page for up to 24 hours. Fix it through a conditional replacement or removal;
 do not bypass or weaken validation.
@@ -536,3 +546,196 @@ Creating or updating this infrastructure is billable and requires separate
 explicit approval. Local implementation and validation must not deploy or diff
 CDK, invoke the production content API, transfer/delete S3 objects, start
 CodeBuild, or change DNS or nameservers.
+
+## 11. Roll out request-time rendering with the `renderFromBackend` flag
+
+Request-time rendering ships behind an AppConfig feature flag. The CDK stack
+creates the AppConfig application `salih-dev`, the environment `production`, the
+feature-flag profile `render-flags` and the deployment strategy
+`salih-dev-render-rollout`, and deploys the flag as off. With the flag off, the
+render Lambda serves the page the publisher baked into the site bucket, so a
+deploy changes nothing a visitor can see.
+
+The render Lambda reads the flag from the AppConfig Agent extension on
+`localhost:2772`, sending the visitor's `vid` cookie as `Context: vid=<id>`. A
+read that fails, returns a non-200 status or takes longer than 300 ms counts as
+off. Every render response carries `x-render-path: lambda` (rendered on request)
+or `x-render-path: static` (baked page).
+
+Turning the flag on, targeting it and raising the percentage are flag
+deployments, not CDK deploys. The CDK stack only holds the default-off flag
+content. Do not change that content in CDK during the rollout: a changed inline
+flag deploys over whatever you set by hand.
+
+### Check the deploy
+
+After the CDK deploy, every dynamic route must report the baked page:
+
+```sh
+curl -sI https://salih.dev/ | grep -i -E 'x-render-path|set-cookie'
+curl -sI https://salih.dev/talks/ | grep -i x-render-path
+curl -sI https://salih.dev/blog/ | grep -i x-render-path
+```
+
+Each prints `x-render-path: static`. The first response without a cookie also
+sets `vid=<uuid>; Max-Age=31536000; Path=/; Secure; HttpOnly; SameSite=Lax`.
+Copy your own `vid` from the browser's cookie storage for the next step.
+
+### Look up the AppConfig ids
+
+The CLI takes ids, not names:
+
+```sh
+APP_ID=$(aws appconfig list-applications --profile personal \
+  --query "Items[?Name=='salih-dev'].Id" --output text)
+ENV_ID=$(aws appconfig list-environments --profile personal \
+  --application-id "$APP_ID" --query "Items[?Name=='production'].Id" --output text)
+PROFILE_ID=$(aws appconfig list-configuration-profiles --profile personal \
+  --application-id "$APP_ID" --query "Items[?Name=='render-flags'].Id" --output text)
+STRATEGY_ID=$(aws appconfig list-deployment-strategies --profile personal \
+  --query "Items[?Name=='salih-dev-render-rollout'].Id" --output text)
+```
+
+### Turn the flag on for one visitor
+
+Write the flag as a multi-variant flag. Variants are evaluated in order and the
+first rule that matches wins; the variant without a rule is the default. Save
+this as `.cache/render-flags.json` with your own `vid`:
+
+```json
+{
+  "version": "1",
+  "flags": {
+    "renderFromBackend": {
+      "name": "renderFromBackend",
+      "description": "Serve the dynamic routes from the render Lambda (on) or the baked static pages (off)."
+    }
+  },
+  "values": {
+    "renderFromBackend": {
+      "_variants": [
+        { "name": "author", "enabled": true, "rule": "(in $vid [\"<your-vid>\"])" },
+        { "name": "default", "enabled": false }
+      ]
+    }
+  }
+}
+```
+
+Create a version and deploy it:
+
+```sh
+VERSION=$(aws appconfig create-hosted-configuration-version --profile personal \
+  --application-id "$APP_ID" --configuration-profile-id "$PROFILE_ID" \
+  --content-type application/json --content file://.cache/render-flags.json \
+  --cli-binary-format raw-in-base64-out --query VersionNumber --output text \
+  .cache/render-flags-returned.json)
+aws appconfig start-deployment --profile personal \
+  --application-id "$APP_ID" --environment-id "$ENV_ID" \
+  --configuration-profile-id "$PROFILE_ID" --configuration-version "$VERSION" \
+  --deployment-strategy-id "$STRATEGY_ID"
+```
+
+The strategy is linear: 25% of targets at a time over 20 minutes, then a
+10-minute final bake. After the deployment completes, your browser gets
+`x-render-path: lambda` and a request with any other `vid` still gets `static`:
+
+```sh
+curl -sI -H 'Cookie: vid=<your-vid>' https://salih.dev/talks/ | grep -i x-render-path
+curl -sI -H 'Cookie: vid=00000000-0000-4000-8000-000000000000' https://salih.dev/talks/ | grep -i x-render-path
+```
+
+The render Lambda does not send an `Entity-Id` header, so AppConfig spreads a
+deployment across Lambda execution environments rather than across visitors.
+While a deployment is in progress, one visitor can get the old flag from one
+execution environment and the new flag from another. Once it completes, every
+environment agrees and the `split` hash keeps each visitor on one side.
+
+### Raise the percentage
+
+Add a `split` variant under the `author` variant and deploy it the same way,
+changing only `pct` for each step (10, then 50, then 100):
+
+```json
+{ "name": "rollout", "enabled": true, "rule": "(split by::$vid pct::10)" }
+```
+
+`split` hashes the `vid`, so a visitor who gets the new path keeps it as the
+percentage goes up. Wait for each deployment to complete, and watch the three
+alarms and the `x-render-path` mix, before the next step.
+
+### Rollback
+
+Three CloudWatch alarms are AppConfig monitors on the `production` environment:
+
+| Alarm | Fires on |
+| --- | --- |
+| Render errors | at least one Lambda `Errors` in a minute |
+| Render latency | p95 duration of 5 seconds or more for three minutes |
+| Render failures | at least one handled render failure in a minute |
+
+The last one comes from a metric filter on the render log group that counts the
+`on_path_fallback`, `render_error`, `middleware_error` and `load_error`
+outcomes. A flag-on request whose content read, validation or render fails with
+a 5xx is served the baked page and logs `on_path_fallback`, so the visitor gets
+a 200 and the Lambda `Errors` metric never sees it.
+
+If an alarm fires during a deployment or its final bake, AppConfig rolls the
+flag back to the previous version on its own. It does not watch the alarms
+after the bake ends. To roll back by hand:
+
+```sh
+# During a deployment: rolls back (state ROLLED_BACK).
+aws appconfig stop-deployment --profile personal \
+  --application-id "$APP_ID" --environment-id "$ENV_ID" --deployment-number <n>
+
+# After a deployment completed, within 72 hours: reverts (state REVERTED).
+aws appconfig stop-deployment --profile personal \
+  --application-id "$APP_ID" --environment-id "$ENV_ID" --deployment-number <n> \
+  --allow-revert
+```
+
+After 72 hours, deploy a version with every variant disabled. Use the
+predefined `AppConfig.AllAtOnce` strategy for that deployment to switch
+everyone off at once.
+
+A render Lambda that fails to start at all is the one failure this does not
+cover, because the baked-page fallback runs inside the same function. The flag
+does not help there; roll back the CDK deploy.
+
+### While the rollout is active
+
+`RENDER_ROLLOUT_ACTIVE=1` is set on the render Lambda, the three content write
+functions (through `rolloutActive: true` on `ContentApi`) and the
+`DevImporter`. It does two things:
+
+- Render responses send `Cache-Control: private, no-store`, and the render
+  behavior uses a cache policy with a zero default TTL, so CloudFront asks the
+  Lambda on every request and the flag is evaluated per visitor.
+- Content writes and the daily import also start the publisher, so the baked
+  pages the off path serves stay current. The write responses then include a
+  `buildId`. A failed publisher start never fails the write.
+
+With caching off, `stale-if-error` has nothing to serve during an outage. The
+baked-page fallback and the rollback alarms cover that window.
+
+### Remove the flag at 100%
+
+Once the flag has been at 100% with no alarm for a few days, remove it in a
+code change:
+
+1. Delete the flag read and the off path from `src/middleware.ts` (`getRenderFlag`,
+   `serveOffPath`) and the off-path modules and tests.
+2. Drop `RENDER_ROLLOUT_ACTIVE` from the render Lambda and the `DevImporter`
+   in `infra/lib/delivery-stack.ts`, and pass `rolloutActive: false` to
+   `ContentApi`. That restores `DYNAMIC_CACHE_CONTROL` (`s-maxage=300`,
+   `stale-if-error=86400`), stops the rollout-time publisher builds, and drops
+   the write functions' `codebuild:StartBuild` grant.
+3. Put the render behavior back on the original render cache policy, remove the
+   site-bucket read grant for baked pages, and remove the AppConfig Agent layer
+   and IAM from the render Lambda.
+4. Keep the `vid` cookie and the AppConfig application if the homepage A/B test
+   will use them; otherwise remove them too.
+
+A missing `site/content.v1.json` or an S3 read failure then returns an uncached
+502 again, and CloudFront serves the last good page through `stale-if-error`.

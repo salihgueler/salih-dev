@@ -256,8 +256,11 @@ Pricing references:
 
 - CloudFront standard logging v2 stores only aggregate operational fields for
   90 days. It deliberately excludes IP addresses, cookies, query strings, user
-  agents, and full referrers; no browser tracker, identifier, or client storage
-  is used.
+  agents, and full referrers. During the `renderFromBackend` rollout the site
+  sets one first-party `vid` cookie (a random UUID, `HttpOnly`) so each visitor
+  stays on one side of the percentage split. It is forwarded only to the render
+  Lambda, is never logged, and is not used for analytics. No other browser
+  tracker, identifier, or client storage is used.
 - The scheduled homepage checker validates HTTP status and the expected title
   every 15 minutes using a short arm64 Lambda invocation. This is appropriate
   for a static Astro site and avoids Synthetics browser-run, artifact, and custom
