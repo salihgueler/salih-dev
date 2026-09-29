@@ -1,4 +1,3 @@
-import { CodeBuildClient, StartBuildCommand } from "@aws-sdk/client-codebuild";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -14,6 +13,7 @@ import type {
 } from "aws-lambda";
 
 import {
+  invalidateDynamicPaths,
   isExpectedEditor,
   jsonResponse,
   logTalkStoreChange,
@@ -21,6 +21,7 @@ import {
   parseStrongEntityTag,
   requestHeader,
   TALK_LOG_ACTIONS,
+  TALKS_DYNAMIC_PATHS,
   type StrongEntityTag,
 } from "./content-api-shared";
 
@@ -28,7 +29,6 @@ const TALK_RECORD_PREFIX = "talks/records/";
 const TALK_RECORD_SUFFIX = ".json";
 const REMOVAL_CONFIRMATION = "confirmed";
 
-const codebuild = new CodeBuildClient({});
 const s3 = new S3Client({});
 
 async function loadApiRecordModule() {
@@ -283,8 +283,7 @@ async function handleRemoval(
   }
 
   const bucketName = requiredEnvironment("CONTENT_BUCKET_NAME");
-  const publisherProjectName = requiredEnvironment("PUBLISHER_PROJECT_NAME");
-  if (bucketName === null || publisherProjectName === null) {
+  if (bucketName === null) {
     return jsonResponse(500, { error: "talk_record_operation_failed" });
   }
 
@@ -345,7 +344,7 @@ async function handleRemoval(
       logTalkStoreChange(event, {
         action: TALK_LOG_ACTIONS.removal,
         storedVersion: stored.etag,
-        buildId: null,
+        invalidationId: null,
       });
       return jsonResponse(500, {
         error: "talk_record_operation_failed",
@@ -355,33 +354,31 @@ async function handleRemoval(
   }
 
   try {
-    const publication = await codebuild.send(
-      new StartBuildCommand({ projectName: publisherProjectName }),
-    );
-    const buildId = publication.build?.id;
-    if (!buildId) {
-      throw new Error("Publisher returned no build identifier");
+    const invalidation = await invalidateDynamicPaths(TALKS_DYNAMIC_PATHS);
+    const invalidationId = invalidation.invalidationId;
+    if (!invalidationId) {
+      throw new Error("CloudFront returned no invalidation identifier");
     }
     logTalkStoreChange(event, {
       action: TALK_LOG_ACTIONS.removal,
       storedVersion: stored.etag,
-      buildId,
+      invalidationId,
     });
     return jsonResponse(202, {
-      buildId,
+      invalidationId,
       deckId: stored.record.deckId,
       recordKey,
-      status: "publishing",
+      status: "published",
     });
   } catch {
     logTalkStoreChange(event, {
       action: TALK_LOG_ACTIONS.removal,
       storedVersion: stored.etag,
-      buildId: null,
+      invalidationId: null,
     });
     return jsonResponse(503, {
       deckId: stored.record.deckId,
-      error: "publication_not_started",
+      error: "invalidation_not_started",
       recordKey,
     });
   }

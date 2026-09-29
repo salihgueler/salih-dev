@@ -220,7 +220,7 @@ test("creates static delivery and daily publishing resources", () => {
   const { delivery } = createStacks();
 
   delivery.resourceCountIs("AWS::CloudFront::Distribution", 1);
-  delivery.resourceCountIs("AWS::CloudFront::Function", 2);
+  delivery.resourceCountIs("AWS::CloudFront::Function", 3);
   delivery.resourceCountIs("AWS::CodeBuild::Project", 1);
   delivery.resourceCountIs("AWS::Scheduler::Schedule", 1);
   delivery.resourceCountIs("AWS::SQS::Queue", 1);
@@ -383,7 +383,7 @@ test("configures isolated talk functions, environments, and one-month logs", () 
       [
         "CONTENT_ALLOWED_CALLER_ARNS",
         "CONTENT_BUCKET_NAME",
-        ...(functionCase.publisher ? ["PUBLISHER_PROJECT_NAME"] : []),
+        ...(functionCase.publisher ? ["DISTRIBUTION_ID"] : []),
       ].sort(),
     );
   }
@@ -550,7 +550,11 @@ test("grants each talk handler only its task-scoped actions and prefixes", () =>
     ["s3:GetObject", "s3:PutObject"],
     "/talks/records/*",
   );
-  assertStatement(completion[4], ["codebuild:StartBuild"], "Publisher");
+  assertStatement(
+    completion[4],
+    ["cloudfront:CreateInvalidation"],
+    "distribution/",
+  );
 
   const records = policyStatements(
     delivery,
@@ -567,7 +571,11 @@ test("grants each talk handler only its task-scoped actions and prefixes", () =>
     "/talks/records/*",
   );
   assertStatement(records[2], ["s3:DeleteObject"], "/talks/decks/*");
-  assertStatement(records[3], ["codebuild:StartBuild"], "Publisher");
+  assertStatement(
+    records[3],
+    ["cloudfront:CreateInvalidation"],
+    "distribution/",
+  );
 
   const talkPolicies = [...start, ...completion, ...records];
   const serialized = JSON.stringify(talkPolicies);
@@ -654,8 +662,82 @@ test("adds no extra storage, identity, or public editor surface", () => {
   delivery.resourceCountIs("AWS::IAM::AccessKey", 0);
   delivery.resourceCountIs("AWS::Cognito::UserPool", 0);
   delivery.resourceCountIs("AWS::Cognito::IdentityPool", 0);
-  delivery.resourceCountIs("AWS::Lambda::Url", 0);
+  // The only Function URL is the render origin, and it is IAM-authed (reachable
+  // only through CloudFront via OAC), not a public editor surface.
+  delivery.resourceCountIs("AWS::Lambda::Url", 1);
+  delivery.hasResourceProperties("AWS::Lambda::Url", {
+    AuthType: "AWS_IAM",
+  });
   delivery.resourceCountIs("AWS::ApiGatewayV2::DomainName", 0);
+});
+
+test("adds a read-only render origin behind CloudFront for the dynamic routes", () => {
+  const { delivery } = createStacks();
+
+  // The render Lambda is Node 24 arm64, like the content functions.
+  const render = findResource(
+    delivery,
+    "AWS::Lambda::Function",
+    "/RenderFunction/Resource",
+  );
+  assert.deepEqual(render.Properties.Architectures, ["arm64"]);
+  assert.equal(render.Properties.Runtime, "nodejs24.x");
+  assert.deepEqual(
+    Object.keys(environmentVariables(render)).sort(),
+    ["CONTENT_BUCKET_NAME", "SALIH_DEV_SSR"],
+  );
+
+  // Read-only, least-privilege: GetObject + prefix-scoped ListBucket only, and
+  // no write, delete, StartBuild, or CreateInvalidation.
+  const renderStatements = policyStatements(
+    delivery,
+    "/RenderFunction/ServiceRole/DefaultPolicy/Resource",
+  );
+  const renderActions = renderStatements.flatMap((statement) =>
+    typeof statement.Action === "string"
+      ? [statement.Action]
+      : (statement.Action as string[]),
+  );
+  assert.ok(renderActions.includes("s3:GetObject"));
+  assert.ok(renderActions.includes("s3:ListBucket"));
+  for (const forbidden of [
+    "s3:PutObject",
+    "s3:DeleteObject",
+    "codebuild:StartBuild",
+    "cloudfront:CreateInvalidation",
+  ]) {
+    assert.ok(
+      !renderActions.includes(forbidden),
+      `render role must not have ${forbidden}`,
+    );
+  }
+  const listStatement = renderStatements.find((statement) =>
+    (typeof statement.Action === "string"
+      ? [statement.Action]
+      : (statement.Action as string[])
+    ).includes("s3:ListBucket"),
+  );
+  assert.ok(listStatement !== undefined);
+  assert.deepEqual(listStatement.Condition, {
+    StringLike: { "s3:prefix": ["talks/records/*", "talks/decks/*"] },
+  });
+
+  // The render origin is a Function URL with IAM auth (OAC-fronted, non-public).
+  delivery.hasResourceProperties("AWS::Lambda::Url", { AuthType: "AWS_IAM" });
+
+  // The distribution routes the four dynamic paths to the render origin and
+  // keeps a separate default (S3) behavior. The home route "/" is dynamic for
+  // its location and events; the talks routes for the archive.
+  delivery.hasResourceProperties("AWS::CloudFront::Distribution", {
+    DistributionConfig: Match.objectLike({
+      CacheBehaviors: Match.arrayWith([
+        Match.objectLike({ PathPattern: "/" }),
+        Match.objectLike({ PathPattern: "/index.md" }),
+        Match.objectLike({ PathPattern: "/talks/" }),
+        Match.objectLike({ PathPattern: "/talks/index.md" }),
+      ]),
+    }),
+  });
 });
 
 test("adds privacy-first analytics and low-cost monitoring", () => {
@@ -669,8 +751,8 @@ test("adds privacy-first analytics and low-cost monitoring", () => {
   delivery.resourceCountIs("AWS::Athena::NamedQuery", 3);
 
   // Monitoring: analytics widget, homepage checker, five content API functions,
-  // operations dashboard, and no browser canary.
-  delivery.resourceCountIs("AWS::Lambda::Function", 7);
+  // the request-time render function, operations dashboard, and no browser canary.
+  delivery.resourceCountIs("AWS::Lambda::Function", 8);
   const lambdaFunctions = delivery.findResources("AWS::Lambda::Function");
   const contentAllowLists = Object.values(lambdaFunctions)
     .map(

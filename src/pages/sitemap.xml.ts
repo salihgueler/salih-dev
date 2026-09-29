@@ -2,7 +2,7 @@ import type { APIRoute } from "astro";
 
 import { site } from "../config/site";
 import { getPublishedPosts, postUrl, slugify } from "../lib/content";
-import { getPublishedTalksSnapshot } from "../lib/talks/gateway";
+import { getPublishedTalksSnapshot } from "../lib/talks/gateway-astro";
 
 /**
  * One sitemap URL. `lastmod` accepts a `Date` for blog records and an already

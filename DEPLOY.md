@@ -199,6 +199,20 @@ protected; deleting a CDK stack does not delete retained content.
 
 ## 9. Manage location and events through the content API
 
+> **Backend-served content.** The Talks archive, the current location, and the
+> events are served at request time by a read-only render Lambda that is a
+> second CloudFront origin (its Function URL is IAM-authed and fronted by Origin
+> Access Control, so it is never public). The render function reads the content
+> bucket and reuses the same validated gateway and serializers the static build
+> uses, so its output matches the baked pages. Consequently the three content
+> write paths — `PUT /v1/content`, talk-upload completion, and talk removal — no
+> longer start the CodeBuild publisher: each stores its object and issues a
+> scoped CloudFront invalidation of exactly the affected dynamic routes, so the
+> change is live within seconds. The publisher remains the sole path for code,
+> design, blog, and other static changes, and its scheduled and manual builds
+> are unchanged. Blog and all other pages stay static.
+
+
 The content API accepts SigV4 requests only from:
 
 ```text
@@ -279,10 +293,13 @@ curl --fail-with-body \
   "$SITE_CONTENT_API/v1/content"
 ```
 
-A successful PUT returns HTTP 202 with the new S3 version and CodeBuild build
-ID. Invalid content returns HTTP 400 before storage; unsigned callers, other IAM
-identities, and mismatched caller ARNs receive HTTP 403. Restore an earlier S3
-version of `site/content.v1.json` and publish again to roll back.
+A successful PUT returns HTTP 202 with the new S3 version and a CloudFront
+invalidation ID (`status: published`). The location and events are served at
+request time by the render origin, so the change is live within seconds without
+a publisher build. Invalid content returns HTTP 400 before storage; unsigned
+callers, other IAM identities, and mismatched caller ARNs receive HTTP 403.
+Restore an earlier S3 version of `site/content.v1.json`; the next request
+reflects it after the write's invalidation.
 
 ## 10. Manage API-authored talks
 
@@ -389,10 +406,12 @@ Completion re-reads the pending object and requires its recorded media type and
 size to match, the `%PDF-` signature to be present, every page to parse with the
 strict pinned parser without a password, and the page count to be positive.
 Only then does it copy the approved deck, conditionally store the API record,
-remove pending state, and start exactly one publisher build. A successful `202`
-returns `status: publishing`, validated byte/page counts, `buildId`, and, for a
-metadata upload, `recordKey`, `recordVersion`, and the same ETag in the response
-header.
+remove pending state, and issue exactly one scoped CloudFront invalidation of
+the Talks routes. A successful `202` returns `status: published`, validated
+byte/page counts, `invalidationId`, and, for a metadata upload, `recordKey`,
+`recordVersion`, and the same ETag in the response header. The Talks archive is
+served at request time by the render origin, so the change is live within
+seconds without a publisher build.
 
 Treat errors according to state:
 

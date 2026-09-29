@@ -1,6 +1,8 @@
 import * as path from "node:path";
+import { execFileSync } from "node:child_process";
 
 import {
+  AssetHashType,
   CfnOutput,
   Duration,
   RemovalPolicy,
@@ -14,6 +16,7 @@ import * as cloudwatch from "aws-cdk-lib/aws-cloudwatch";
 import * as actions from "aws-cdk-lib/aws-cloudwatch-actions";
 import * as codebuild from "aws-cdk-lib/aws-codebuild";
 import * as iam from "aws-cdk-lib/aws-iam";
+import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as route53 from "aws-cdk-lib/aws-route53";
 import * as targets from "aws-cdk-lib/aws-route53-targets";
@@ -28,7 +31,8 @@ import type { Construct } from "constructs";
 
 import { Analytics } from "./analytics";
 import { ContentApi } from "./content-api";
-import { viewerRequestCode, viewerResponseCode } from "./edge-functions";
+import { suppressBasicLambdaLoggingPolicy } from "./lambda-log-suppressions";
+import { viewerRequestCode, viewerRenderRequestCode, viewerResponseCode } from "./edge-functions";
 import { Monitoring } from "./monitoring";
 
 export interface SalihDevDeliveryStackProps extends StackProps {
@@ -84,6 +88,18 @@ export class SalihDevDeliveryStack extends Stack {
         "Redirect www, negotiate Markdown, and map clean URLs to S3 objects.",
       runtime: cloudfront.FunctionRuntime.JS_2_0,
     });
+    const renderRequestFunction = new cloudfront.Function(
+      this,
+      "ViewerRenderRequest",
+      {
+        code: cloudfront.FunctionCode.fromInline(
+          viewerRenderRequestCode(props.domainName),
+        ),
+        comment:
+          "Redirect www and negotiate Markdown for the SSR render origin, keeping clean route paths.",
+        runtime: cloudfront.FunctionRuntime.JS_2_0,
+      },
+    );
     const responseFunction = new cloudfront.Function(this, "ViewerResponse", {
       code: cloudfront.FunctionCode.fromInline(
         viewerResponseCode(props.domainName),
@@ -126,7 +142,162 @@ export class SalihDevDeliveryStack extends Stack {
       },
     );
 
+    // --- Request-time render origin for Talks / Location / Events ---
+    // A read-only Lambda that reads the content bucket at request time and
+    // renders the dynamic routes with Astro SSR (the official @astrojs/node
+    // adapter in middleware mode, wrapped by a thin API Gateway handler), so a
+    // content write is live in seconds via a scoped CloudFront invalidation
+    // instead of a full publisher build. The package (handler + SSR server +
+    // prerendered client assets) is assembled by scripts/build-render-lambda.mjs.
+    const renderLogGroup = new logs.LogGroup(this, "RenderLogs", {
+      removalPolicy: RemovalPolicy.DESTROY,
+      retention: logs.RetentionDays.ONE_MONTH,
+    });
+    const renderBuildScript = path.resolve(
+      __dirname,
+      "../scripts/build-render-lambda.mjs",
+    );
+    const renderFunction = new lambda.Function(this, "RenderFunction", {
+      architecture: lambda.Architecture.ARM_64,
+      code: lambda.Code.fromAsset(path.resolve(__dirname, "../.."), {
+        assetHashType: AssetHashType.OUTPUT,
+        bundling: {
+          // Bundling runs on the host (no container): the SSR build needs the
+          // repo's own toolchain and node_modules. The Docker image is declared
+          // only to satisfy the BundlingOptions contract; local bundling always
+          // succeeds here, so the image is never pulled.
+          image: lambda.Runtime.NODEJS_24_X.bundlingImage,
+          local: {
+            tryBundle(outputDir: string): boolean {
+              execFileSync("node", [renderBuildScript, outputDir], {
+                stdio: "inherit",
+              });
+              return true;
+            },
+          },
+          command: [],
+        },
+      }),
+      environment: {
+        CONTENT_BUCKET_NAME: props.contentBucket.bucketName,
+        SALIH_DEV_SSR: "1",
+      },
+      handler: "index.handler",
+      logGroup: renderLogGroup,
+      memorySize: 1024,
+      runtime: lambda.Runtime.NODEJS_24_X,
+      timeout: Duration.seconds(29),
+    });
+
+    // Read-only, least-privilege: GetObject on the content object and the talk
+    // prefixes, plus prefix-scoped ListBucket so a missing key surfaces as a
+    // clean 404 rather than an AccessDenied masked as a 500.
+    renderFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["s3:ListBucket"],
+        conditions: {
+          StringLike: {
+            "s3:prefix": ["talks/records/*", "talks/decks/*"],
+          },
+        },
+        resources: [props.contentBucket.bucketArn],
+      }),
+    );
+    renderFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["s3:GetObject"],
+        resources: [
+          props.contentBucket.arnForObjects("site/content.v1.json"),
+          props.contentBucket.arnForObjects("talks/records/*"),
+          props.contentBucket.arnForObjects("talks/decks/*"),
+        ],
+      }),
+    );
+
+    suppressBasicLambdaLoggingPolicy(
+      renderFunction,
+      "one-month render execution logs",
+    );
+    NagSuppressions.addResourceSuppressions(
+      renderFunction,
+      [
+        {
+          id: "AwsSolutions-IAM5",
+          appliesTo: [
+            "Resource::<ContentBucket52D4B12C.Arn>/talks/records/*",
+            "Resource::<ContentBucket52D4B12C.Arn>/talks/decks/*",
+          ],
+          reason:
+            "The render function reads only the two code-owned talk prefixes it renders; the object wildcard is scoped to exactly those prefixes and grants read (GetObject) only, with no write, delete, or list outside the prefixes.",
+        },
+      ],
+      true,
+    );
+
+    // The Lambda is reachable only through CloudFront: its Function URL uses
+    // IAM auth and is fronted with Origin Access Control, so it is never a
+    // world-reachable endpoint.
+    const renderFunctionUrl = renderFunction.addFunctionUrl({
+      authType: lambda.FunctionUrlAuthType.AWS_IAM,
+    });
+    const renderOrigin =
+      origins.FunctionUrlOrigin.withOriginAccessControl(renderFunctionUrl);
+
+    // Dynamic routes cache briefly at the edge and are refreshed by the write
+    // paths' scoped invalidation; the cache key includes Accept so HTML and
+    // Markdown negotiate correctly.
+    const renderCachePolicy = new cloudfront.CachePolicy(
+      this,
+      "RenderCachePolicy",
+      {
+        cachePolicyName: "salih-dev-render",
+        // The origin controls the live cache window with `s-maxage=300`, which
+        // sits between the min and default TTLs. The max TTL is 24 hours so
+        // CloudFront can honour the responses' `stale-if-error=86400`: it serves
+        // stale content up to the lesser of stale-if-error and the max TTL, so a
+        // shorter max TTL would truncate the outage-resilience window (req 5.3).
+        defaultTtl: Duration.minutes(5),
+        maxTtl: Duration.hours(24),
+        minTtl: Duration.seconds(0),
+        headerBehavior: cloudfront.CacheHeaderBehavior.allowList("Accept"),
+        cookieBehavior: cloudfront.CacheCookieBehavior.none(),
+        queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
+        enableAcceptEncodingGzip: true,
+        enableAcceptEncodingBrotli: true,
+      },
+    );
+
+    const renderBehavior: cloudfront.BehaviorOptions = {
+      allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD_OPTIONS,
+      cachePolicy: renderCachePolicy,
+      compress: true,
+      functionAssociations: [
+        {
+          eventType: cloudfront.FunctionEventType.VIEWER_REQUEST,
+          function: renderRequestFunction,
+        },
+        {
+          eventType: cloudfront.FunctionEventType.VIEWER_RESPONSE,
+          function: responseFunction,
+        },
+      ],
+      origin: renderOrigin,
+      responseHeadersPolicy: responseHeaders,
+      viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+    };
+
     const distribution = new cloudfront.Distribution(this, "Distribution", {
+      additionalBehaviors: {
+        // The four dynamic routes are served on request by the render origin;
+        // everything else falls through to the S3 default behavior. The home
+        // route "/" is served dynamically for its location and events, while
+        // the render viewer-request function keeps the clean route paths ("/",
+        // "/talks/") the SSR server matches and negotiates the ".md" alternates.
+        "/": renderBehavior,
+        "/index.md": renderBehavior,
+        "/talks/": renderBehavior,
+        "/talks/index.md": renderBehavior,
+      },
       certificate,
       defaultBehavior: {
         allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD_OPTIONS,
@@ -309,7 +480,7 @@ export class SalihDevDeliveryStack extends Stack {
     new ContentApi(this, "ContentApi", {
       allowedCallerArns: [rootEditorArn],
       contentBucket: props.contentBucket,
-      publisher: project,
+      distribution,
     });
 
     const schedulerDlq = new sqs.Queue(this, "SchedulerDlq", {

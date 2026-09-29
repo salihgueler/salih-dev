@@ -32,8 +32,16 @@ import TalkFilter from "../../components/TalkFilter.astro";
 import { site } from "../../config/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { canonicalUrl } from "../../lib/discovery";
-import { getPublishedTalksSnapshot } from "../../lib/talks/gateway";
+import { PRERENDER_DYNAMIC_ROUTE } from "../../lib/dynamic-route";
+import { getPublishedTalksSnapshot } from "../../lib/talks/gateway-astro";
 import { projectTalkArchive } from "../../lib/talks/projection";
+
+// Backend-served-content: in the SSR build (render Lambda) this route is served
+// on request from the content bucket, with the request-scoped published
+// snapshot set by the Lambda before this page runs. In the static publisher
+// build the same page reads the baked collection and produces the identical
+// archive, so a missing dynamic origin still leaves a valid static page.
+export const prerender = PRERENDER_DYNAMIC_ROUTE;
 
 const talks = await getPublishedTalksSnapshot();
 const archive = projectTalkArchive(talks);

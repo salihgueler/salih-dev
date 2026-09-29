@@ -1,18 +1,8 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-
-import fallbackContent from "./site-content.default.json";
 import {
-  parseSiteContent,
-  type SiteEvent,
-} from "./site-content-schema";
-
-const sourcePath = process.env.SITE_CONTENT_PATH;
-const rawContent: unknown = sourcePath
-  ? JSON.parse(readFileSync(resolve(process.cwd(), sourcePath), "utf8"))
-  : fallbackContent;
-
-export const siteContent = parseSiteContent(rawContent);
+  resolveSiteContent,
+  resolveSiteContentToday,
+} from "./site-content-source";
+import type { SiteContent, SiteEvent } from "./site-content-schema";
 
 export type DisplayConference = {
   name: string;
@@ -22,16 +12,36 @@ export type DisplayConference = {
   role?: string;
 };
 
-export const conferences = classifyEvents(
-  siteContent.events,
-  process.env.SITE_CONTENT_TODAY ?? new Date().toISOString().slice(0, 10),
-);
+export type ClassifiedConferences = Record<
+  "upcoming" | "recent",
+  DisplayConference[]
+>;
+
+/**
+ * The active request's site content, or the build-time default.
+ *
+ * The static build reads this with no request override in effect, so it sees
+ * the packaged default and bakes it. The request-time renderer sets an override
+ * (see `site-content-source.ts`) so the same call returns the content it read
+ * from S3, without any reader having to know which caller it is serving.
+ */
+export function getSiteContent(): SiteContent {
+  return resolveSiteContent();
+}
+
+/** The active request's events, classified into upcoming and recent. */
+export function getConferences(): ClassifiedConferences {
+  return classifyEvents(getSiteContent().events, resolveSiteContentToday());
+}
 
 export function formatIsoDate(value: string): string {
   return dateParts(value).full;
 }
 
-function classifyEvents(events: SiteEvent[], today: string) {
+function classifyEvents(
+  events: SiteEvent[],
+  today: string,
+): ClassifiedConferences {
   const projected = events.map((event) => ({
     event,
     isPast:

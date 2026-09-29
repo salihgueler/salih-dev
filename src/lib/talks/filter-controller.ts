@@ -37,8 +37,8 @@ import {
   formatResultMessage,
   type TalkFilterSelection,
   type TalkFilterState,
-} from "./filter-state";
-import type { TalkFilterOption } from "./model";
+} from "./filter-state.js";
+import type { TalkFilterOption } from "./model.js";
 
 /** One selectable option as rendered by the filter. */
 export type FilterControllerOption = Readonly<{

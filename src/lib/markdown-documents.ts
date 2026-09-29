@@ -2,7 +2,7 @@ import type { CollectionEntry } from "astro:content";
 
 import { site } from "../config/site";
 import { formatDate, getPublishedPosts, postUrl, slugify } from "./content";
-import { getPublishedTalksSnapshot } from "./talks/gateway";
+import { getPublishedTalksSnapshot } from "./talks/gateway-astro";
 import { serializeTalksMarkdown } from "./talks/markdown";
 
 export async function markdownForPath(

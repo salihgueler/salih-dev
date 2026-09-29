@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { CodeBuildClient, StartBuildCommand } from "@aws-sdk/client-codebuild";
+import {
+  CloudFrontClient,
+  CreateInvalidationCommand,
+} from "@aws-sdk/client-cloudfront";
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
@@ -27,7 +30,7 @@ import { handler as startHandler } from "../functions/talk-upload-start";
 const EDITOR_ARN = "arn:aws:iam::123456789012:root";
 const FOREIGN_ARN = "arn:aws:iam::999999999999:root";
 const BUCKET = "integration-content-bucket";
-const PUBLISHER = "integration-publisher";
+const DISTRIBUTION_ID = "INTEGRATIONDIST";
 const DECK_ID = "10000000-0000-4000-8000-000000000001";
 const OTHER_DECK_ID = "20000000-0000-4000-8000-000000000002";
 const PENDING_ETAG = '"pending-version"';
@@ -391,7 +394,7 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
   pdfFixtures = pdfFixtureModule.PDF_TEST_FIXTURES;
 
   const originalS3Send = S3Client.prototype.send;
-  const originalCodeBuildSend = CodeBuildClient.prototype.send;
+  const originalCloudFrontSend = CloudFrontClient.prototype.send;
   const originalConsoleLog = console.log;
   const originalConsoleError = console.error;
   const environmentNames = [
@@ -401,7 +404,7 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
     "AWS_SESSION_TOKEN",
     "CONTENT_ALLOWED_CALLER_ARNS",
     "CONTENT_BUCKET_NAME",
-    "PUBLISHER_PROJECT_NAME",
+    "DISTRIBUTION_ID",
     "REPOSITORY_TALK_RECORD_KEYS",
   ] as const;
   const previousEnvironment = new Map(
@@ -411,14 +414,14 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
   let s3Send: AwsSend = async (command) => {
     throw new Error(`Unexpected S3 command: ${commandName(command)}`);
   };
-  let codeBuildSend: AwsSend = async () => {
-    throw new Error("Unexpected CodeBuild command");
+  let cloudFrontSend: AwsSend = async () => {
+    throw new Error("Unexpected CloudFront command");
   };
 
   S3Client.prototype.send = (async (command: unknown) =>
     s3Send(command)) as S3Client["send"];
-  CodeBuildClient.prototype.send = (async (command: unknown) =>
-    codeBuildSend(command)) as CodeBuildClient["send"];
+  CloudFrontClient.prototype.send = (async (command: unknown) =>
+    cloudFrontSend(command)) as CloudFrontClient["send"];
 
   Object.assign(process.env, {
     AWS_ACCESS_KEY_ID: "ASIATESTONLY",
@@ -427,7 +430,7 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
     AWS_SESSION_TOKEN: "integration-session-token",
     CONTENT_ALLOWED_CALLER_ARNS: EDITOR_ARN,
     CONTENT_BUCKET_NAME: BUCKET,
-    PUBLISHER_PROJECT_NAME: PUBLISHER,
+    DISTRIBUTION_ID: DISTRIBUTION_ID,
     REPOSITORY_TALK_RECORD_KEYS: "",
   });
   console.log = () => undefined;
@@ -435,7 +438,7 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
 
   t.after(() => {
     S3Client.prototype.send = originalS3Send;
-    CodeBuildClient.prototype.send = originalCodeBuildSend;
+    CloudFrontClient.prototype.send = originalCloudFrontSend;
     console.log = originalConsoleLog;
     console.error = originalConsoleError;
     for (const name of environmentNames) {
@@ -453,9 +456,9 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
         calls.push(commandName(command));
         return {};
       };
-      codeBuildSend = async () => {
-        calls.push("build");
-        return { build: { id: "unexpected" } };
+      cloudFrontSend = async () => {
+        calls.push("invalidate");
+        return { Invalidation: { Id: "unexpected" } };
       };
 
       const responses = await Promise.all([
@@ -483,8 +486,8 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
         if (command instanceof PutObjectCommand) return { ETag: '"staged"' };
         throw new Error(`Unexpected S3 command: ${commandName(command)}`);
       };
-      codeBuildSend = async () => {
-        assert.fail("Rejected upload-start requests must not start a build");
+      cloudFrontSend = async () => {
+        assert.fail("Rejected upload-start requests must not start an invalidation");
       };
 
       const empty = await invokeStart(startEvent());
@@ -636,8 +639,8 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
         calls.push(commandName(command));
         return {};
       };
-      codeBuildSend = async () => {
-        calls.push("build");
+      cloudFrontSend = async () => {
+        calls.push("invalidate");
         return {};
       };
 
@@ -680,9 +683,9 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
             `Mutation attempted for rejected PDF: ${commandName(command)}`,
           );
         };
-        codeBuildSend = async () => {
+        cloudFrontSend = async () => {
           buildCalls += 1;
-          return { build: { id: "unexpected" } };
+          return { Invalidation: { Id: "unexpected" } };
         };
 
         const response = await invokeCompletion(completionEvent());
@@ -704,7 +707,7 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
   );
 
   await t.test(
-    "stores a valid record only after validation and starts one build",
+    "stores a valid record only after validation and starts one invalidation",
     async () => {
       const bytes = fixtures().multiPage;
       const expectedRecordKey = deriveTalkRecordKey(
@@ -743,20 +746,20 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
         if (command instanceof DeleteObjectCommand) return {};
         throw new Error(`Unexpected S3 command: ${commandName(command)}`);
       };
-      codeBuildSend = async (command) => {
-        assert.ok(command instanceof StartBuildCommand);
-        assert.equal(command.input.projectName, PUBLISHER);
-        sequence.push("build");
-        return { build: { id: "build-success" } };
+      cloudFrontSend = async (command) => {
+        assert.ok(command instanceof CreateInvalidationCommand);
+        assert.equal(command.input.DistributionId, DISTRIBUTION_ID);
+        sequence.push("invalidate");
+        return { Invalidation: { Id: "invalidation-success" } };
       };
 
       const response = await invokeCompletion(completionEvent({ body: "{}" }));
       assert.equal(response.statusCode, 202);
       const body = responseBody(response);
-      assert.equal(body.status, "publishing");
+      assert.equal(body.status, "published");
       assert.equal(body.recordKey, expectedRecordKey);
       assert.equal(body.recordVersion, '"new-record-version"');
-      assert.equal(body.buildId, "build-success");
+      assert.equal(body.invalidationId, "invalidation-success");
       assert.equal(response.headers?.etag, '"new-record-version"');
       assert.notEqual(
         parseApiTalkRecord(JSON.parse(storedBody) as unknown),
@@ -771,7 +774,7 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
         `put:${recordObjectKey(expectedRecordKey)}`,
         `delete:${pendingKey(DECK_ID)}`,
         `delete:${stagedKey(DECK_ID)}`,
-        "build",
+        "invalidate",
       ]);
     },
   );
@@ -807,7 +810,7 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
         if (command instanceof DeleteObjectCommand) return {};
         throw new Error(`Unexpected S3 command: ${commandName(command)}`);
       };
-      codeBuildSend = async () => ({ build: { id: "build-tagged" } });
+      cloudFrontSend = async () => ({ Invalidation: { Id: "invalidation-tagged" } });
 
       const response = await invokeCompletion(completionEvent({ body: "{}" }));
       assert.equal(response.statusCode, 202);
@@ -861,9 +864,9 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
         if (command instanceof DeleteObjectCommand) return {};
         throw new Error(`Unexpected S3 command: ${commandName(command)}`);
       };
-      codeBuildSend = async () => {
-        sequence.push("build");
-        return { build: { id: "replacement-build" } };
+      cloudFrontSend = async () => {
+        sequence.push("invalidate");
+        return { Invalidation: { Id: "replacement-invalidation" } };
       };
 
       const response = await invokeCompletion(completionEvent());
@@ -879,13 +882,13 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
         `delete:${pendingKey(DECK_ID)}`,
         `delete:${stagedKey(DECK_ID)}`,
         `delete:${approvedKey(OTHER_DECK_ID)}`,
-        "build",
+        "invalidate",
       ]);
     },
   );
 
   await t.test(
-    "returns exact precondition statuses without mutation or publication",
+    "returns exact precondition statuses without mutation or invalidation",
     async () => {
       const existing = storedRecord(OTHER_DECK_ID);
       const mutations: string[] = [];
@@ -907,9 +910,9 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
         }
         throw new Error(`Unexpected S3 command: ${commandName(command)}`);
       };
-      codeBuildSend = async () => {
+      cloudFrontSend = async () => {
         buildCalls += 1;
-        return { build: { id: "unexpected" } };
+        return { Invalidation: { Id: "unexpected" } };
       };
 
       const missingReplacement = await invokeStart(
@@ -1048,10 +1051,10 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
         }
         throw new Error(`Unexpected S3 command: ${commandName(command)}`);
       };
-      codeBuildSend = async (command) => {
-        assert.ok(command instanceof StartBuildCommand);
-        sequence.push("build");
-        return { build: { id: "removal-build" } };
+      cloudFrontSend = async (command) => {
+        assert.ok(command instanceof CreateInvalidationCommand);
+        sequence.push("invalidate");
+        return { Invalidation: { Id: "removal-invalidation" } };
       };
 
       const response = await invokeRecords(
@@ -1062,12 +1065,12 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
         }),
       );
       assert.equal(response.statusCode, 202);
-      assert.equal(responseBody(response).buildId, "removal-build");
+      assert.equal(responseBody(response).invalidationId, "removal-invalidation");
       assert.deepEqual(sequence, [
         `get:${recordObjectKey(record.recordKey)}`,
         `delete:${recordObjectKey(record.recordKey)}`,
         `delete:${approvedKey(record.deckId)}`,
-        "build",
+        "invalidate",
       ]);
     },
   );
@@ -1108,9 +1111,9 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
         }
         throw new Error(`Unexpected S3 command: ${commandName(command)}`);
       };
-      codeBuildSend = async () => {
+      cloudFrontSend = async () => {
         buildCalls += 1;
-        return { build: { id: "retry-build" } };
+        return { Invalidation: { Id: "retry-invalidation" } };
       };
 
       const first = await invokeCompletion(completionEvent());
@@ -1121,7 +1124,7 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
 
       const retry = await invokeCompletion(completionEvent());
       assert.equal(retry.statusCode, 202);
-      assert.equal(responseBody(retry).buildId, "retry-build");
+      assert.equal(responseBody(retry).invalidationId, "retry-invalidation");
       assert.equal(recordWriteAttempts, 2);
       assert.equal(approvedCopies, 2);
       assert.equal(cleanupCalls, 2);
@@ -1130,7 +1133,7 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
   );
 
   await t.test(
-    "retains a stored record when publication fails and prevents duplicate retry mutation",
+    "retains a stored record when invalidation fails and prevents duplicate retry mutation",
     async () => {
       const bytes = fixtures().singlePage;
       const recordKey = deriveTalkRecordKey(
@@ -1170,15 +1173,15 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
         }
         throw new Error(`Unexpected S3 command: ${commandName(command)}`);
       };
-      codeBuildSend = async () => {
+      cloudFrontSend = async () => {
         buildCalls += 1;
-        throw new Error("stubbed publisher failure");
+        throw new Error("stubbed invalidation failure");
       };
 
       const failedPublication = await invokeCompletion(completionEvent());
       assert.equal(failedPublication.statusCode, 503);
       const failedBody = responseBody(failedPublication);
-      assert.equal(failedBody.error, "publication_not_started");
+      assert.equal(failedBody.error, "invalidation_not_started");
       assert.equal(failedBody.recordKey, recordKey);
       assert.notEqual(
         parseApiTalkRecord(JSON.parse(recordBody) as unknown),
@@ -1198,7 +1201,7 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
   );
 
   await t.test(
-    "returns publication failure when removal cannot obtain a build identifier",
+    "returns invalidation failure when removal cannot obtain an invalidation identifier",
     async () => {
       const record = storedRecord(OTHER_DECK_ID);
       s3Send = async (command) => {
@@ -1211,7 +1214,7 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
         if (command instanceof DeleteObjectCommand) return {};
         throw new Error(`Unexpected S3 command: ${commandName(command)}`);
       };
-      codeBuildSend = async () => ({});
+      cloudFrontSend = async () => ({});
 
       const response = await invokeRecords(
         recordsEvent({
@@ -1221,7 +1224,7 @@ test("talk upload handlers integrate through stubbed AWS clients", async (t) => 
         }),
       );
       assert.equal(response.statusCode, 503);
-      assert.equal(responseBody(response).error, "publication_not_started");
+      assert.equal(responseBody(response).error, "invalidation_not_started");
     },
   );
 });

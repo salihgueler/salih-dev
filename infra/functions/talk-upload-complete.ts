@@ -1,4 +1,3 @@
-import { CodeBuildClient, StartBuildCommand } from "@aws-sdk/client-codebuild";
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
@@ -30,6 +29,7 @@ import type { TalkUploadRequest } from "../../src/lib/talks/upload-request.js" w
   "resolution-mode": "import",
 };
 import {
+  invalidateDynamicPaths,
   isExpectedEditor,
   jsonResponse,
   logDeckValidation,
@@ -38,11 +38,11 @@ import {
   requestBody,
   requestBodyByteLength,
   TALK_LOG_ACTIONS,
+  TALKS_DYNAMIC_PATHS,
 } from "./content-api-shared";
 
 const RECORD_PREFIX = "talks/records/";
 
-const codebuild = new CodeBuildClient({});
 const s3 = new S3Client({});
 
 async function loadTalkModules() {
@@ -276,12 +276,12 @@ async function removePendingObjects(
 function logStored(
   event: CompletionEvent,
   state: ApprovedState,
-  buildId: string | null,
+  invalidationId: string | null,
 ): void {
   logTalkStoreChange(event, {
     action: TALK_LOG_ACTIONS.store,
     storedVersion: state.storedVersion,
-    buildId,
+    invalidationId,
   });
 }
 
@@ -328,8 +328,7 @@ export const handler: Handler<
   const deckId = deckIdValue;
 
   const bucket = process.env.CONTENT_BUCKET_NAME;
-  const publisherProjectName = process.env.PUBLISHER_PROJECT_NAME;
-  if (!bucket || !publisherProjectName) {
+  if (!bucket) {
     console.error("Talk upload completion configuration is missing");
     return jsonResponse(500, { error: "talk_upload_failed" });
   }
@@ -630,20 +629,18 @@ export const handler: Handler<
     return jsonResponse(500, { error: "talk_upload_failed" });
   }
 
-  let buildId: string;
+  let invalidationId: string;
   try {
-    const publication = await codebuild.send(
-      new StartBuildCommand({ projectName: publisherProjectName }),
-    );
-    if (!publication.build?.id) {
-      throw new Error("Publisher returned no build identifier");
+    const invalidation = await invalidateDynamicPaths(TALKS_DYNAMIC_PATHS);
+    if (!invalidation.invalidationId) {
+      throw new Error("CloudFront returned no invalidation identifier");
     }
-    buildId = publication.build.id;
+    invalidationId = invalidation.invalidationId;
   } catch {
-    console.error("Talk upload stored but publication failed to start");
+    console.error("Talk upload stored but invalidation failed to start");
     logStored(event, approvedState, null);
     return jsonResponse(503, {
-      error: "publication_not_started",
+      error: "invalidation_not_started",
       deckId,
       approvedStorageKey,
       ...(prospectiveRecordKey === null
@@ -655,16 +652,16 @@ export const handler: Handler<
     });
   }
 
-  logStored(event, approvedState, buildId);
+  logStored(event, approvedState, invalidationId);
   return jsonResponse(
     202,
     {
-      status: "publishing",
+      status: "published",
       deckId,
       approvedStorageKey,
       byteLength: pendingContentLength,
       pageCount,
-      buildId,
+      invalidationId,
       ...(prospectiveRecordKey === null
         ? {}
         : {

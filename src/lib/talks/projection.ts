@@ -36,7 +36,7 @@ import {
   type TalkAllFilterOption,
   type TalkFilterSelection,
   type TalkFilterState,
-} from "./filter-state";
+} from "./filter-state.js";
 import type {
   HttpsUrl,
   GitHubUrl,
@@ -47,8 +47,8 @@ import type {
   PublishedTalk,
   SlidePath,
   TalkFilterOption,
-} from "./model";
-import { parseIsoDateParts } from "./validation";
+} from "./model.js";
+import { parseIsoDateParts } from "./validation.js";
 
 export {
   ALL_TALKS_FILTER_ID,
@@ -64,7 +64,7 @@ export {
   type TalkAllFilterOption,
   type TalkFilterSelection,
   type TalkFilterState,
-} from "./filter-state";
+} from "./filter-state.js";
 
 /**
  * English month names. The table is code-owned rather than resolved through

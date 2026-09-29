@@ -1,3 +1,7 @@
+import {
+  CloudFrontClient,
+  CreateInvalidationCommand,
+} from "@aws-sdk/client-cloudfront";
 import type {
   APIGatewayProxyEventV2WithIAMAuthorizer,
   APIGatewayProxyStructuredResultV2,
@@ -6,6 +10,47 @@ import type {
 export const CONTENT_KEY = "site/content.v1.json";
 export const MAX_JSON_BODY_BYTES = 64 * 1024;
 export const MAX_CONTENT_BYTES = MAX_JSON_BODY_BYTES;
+
+/**
+ * Dynamic routes served at request time by the render function. A write
+ * invalidates exactly the paths its content backs, so the next request at the
+ * edge reflects the new content within seconds without a publisher build.
+ */
+export const HOME_DYNAMIC_PATHS = ["/", "/index.md"] as const;
+export const TALKS_DYNAMIC_PATHS = ["/talks/", "/talks/index.md"] as const;
+
+const cloudfront = new CloudFrontClient({});
+
+/** Outcome of a scoped CloudFront invalidation. */
+export type InvalidationOutcome = Readonly<{
+  invalidationId: string | undefined;
+}>;
+
+/**
+ * Invalidates exactly the supplied dynamic paths on the delivery distribution.
+ *
+ * The distribution id is code-configured through `DISTRIBUTION_ID`, so a write
+ * handler can never target another distribution, and the paths are the fixed
+ * code-owned dynamic routes rather than caller input.
+ */
+export async function invalidateDynamicPaths(
+  paths: readonly string[],
+): Promise<InvalidationOutcome> {
+  const result = await cloudfront.send(
+    new CreateInvalidationCommand({
+      DistributionId: process.env.DISTRIBUTION_ID,
+      InvalidationBatch: {
+        CallerReference: `content-${Date.now()}`,
+        Paths: {
+          Quantity: paths.length,
+          Items: [...paths],
+        },
+      },
+    }),
+  );
+
+  return { invalidationId: result.Invalidation?.Id };
+}
 
 export const TALK_LOG_ACTIONS = {
   authorization: "authorize-content-editor",
@@ -34,7 +79,7 @@ export type DeckValidationLogDetails = Readonly<{
 export type TalkStoreLogDetails = Readonly<{
   action: TalkStoreAction;
   storedVersion: string | null;
-  buildId: string | null;
+  invalidationId: string | null;
 }>;
 
 const STRONG_ENTITY_TAG_PATTERN = /^"[\u0021\u0023-\u002b\u002d-\u007e]+"$/u;
@@ -151,7 +196,7 @@ export function logTalkStoreChange(
     JSON.stringify({
       action: details.action,
       storedVersion: details.storedVersion,
-      buildId: details.buildId,
+      invalidationId: details.invalidationId,
       requestId: requestId(event),
     }),
   );

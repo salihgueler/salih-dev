@@ -2,7 +2,15 @@
 import LocationSidebar from "../components/LocationSidebar.astro";
 import PostCard from "../components/PostCard.astro";
 import BaseLayout from "../layouts/BaseLayout.astro";
+import { PRERENDER_DYNAMIC_ROUTE } from "../lib/dynamic-route";
 import { getPublishedPosts } from "../lib/content";
+
+// Backend-served-content: in the SSR build (render Lambda) the home page is
+// served on request so the location and events reflect the content bucket; the
+// latest-posts list is static blog data compiled into the SSR bundle. In the
+// static publisher build the same page bakes the build-time content. The render
+// Lambda sets the request-scoped site content before this page runs.
+export const prerender = PRERENDER_DYNAMIC_ROUTE;
 
 const posts = await getPublishedPosts();
 ---

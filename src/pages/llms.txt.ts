@@ -3,7 +3,7 @@ import type { APIRoute } from "astro";
 import { site } from "../config/site";
 import { getPublishedPosts, postUrl } from "../lib/content";
 import { contentSignal } from "../lib/discovery";
-import { getPublishedTalksSnapshot } from "../lib/talks/gateway";
+import { getPublishedTalksSnapshot } from "../lib/talks/gateway-astro";
 
 export const GET: APIRoute = async () => {
   const posts = await getPublishedPosts();

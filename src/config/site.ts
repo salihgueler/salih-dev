@@ -1,5 +1,11 @@
 import { SITE_ORIGIN } from "./site-origin.js";
-import { conferences, formatIsoDate, siteContent } from "./site-content";
+import {
+  formatIsoDate,
+  getConferences,
+  getSiteContent,
+  type ClassifiedConferences,
+  type DisplayConference,
+} from "./site-content";
 
 export type SocialKey = "linkedin" | "x" | "github" | "bluesky";
 
@@ -17,6 +23,37 @@ export type Conference = {
   role?: string;
 };
 
+export type SiteLocationView = {
+  city: string;
+  country: string;
+  updated: string;
+  coordinates: { x: number; y: number };
+  map: {
+    src: string;
+    attribution: string;
+    attributionUrl: string;
+  };
+};
+
+const MAP = {
+  src: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Blank_Gomberg_World_map.png/1280px-Blank_Gomberg_World_map.png",
+  attribution: "Map: Wikimedia Commons",
+  attributionUrl:
+    "https://commons.wikimedia.org/wiki/File:Blank_Gomberg_World_map.png",
+} as const;
+
+/**
+ * The site configuration.
+ *
+ * Everything here is static except `location` and `conferences`, which are the
+ * two mutable content surfaces. They are exposed as getters so a reader keeps
+ * writing `site.location.city` / `site.conferences.upcoming` unchanged, while
+ * the value is resolved per request: the static build sees the build-time
+ * default, and the request-time renderer sees the content it read from S3 for
+ * that request (see `site-content-source.ts`). The getters read fresh on every
+ * access, so a content override that is set for one request never leaks into
+ * another and no reader caches a stale value.
+ */
 export const site = {
   name: "Salih Güler",
   shortName: "Salih",
@@ -43,17 +80,15 @@ export const site = {
     "Developer experience",
     "Serverless architecture",
   ],
-  location: {
-    city: siteContent.location.city,
-    country: siteContent.location.country,
-    updated: formatIsoDate(siteContent.location.updatedOn),
-    coordinates: siteContent.location.coordinates,
-    map: {
-      src: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Blank_Gomberg_World_map.png/1280px-Blank_Gomberg_World_map.png",
-      attribution: "Map: Wikimedia Commons",
-      attributionUrl:
-        "https://commons.wikimedia.org/wiki/File:Blank_Gomberg_World_map.png",
-    },
+  get location(): SiteLocationView {
+    const { location } = getSiteContent();
+    return {
+      city: location.city,
+      country: location.country,
+      updated: formatIsoDate(location.updatedOn),
+      coordinates: location.coordinates,
+      map: MAP,
+    };
   },
   socials: [
     {
@@ -77,11 +112,12 @@ export const site = {
       icon: "bluesky",
     },
   ] satisfies SocialLink[],
-  conferences: conferences satisfies Record<
-    "upcoming" | "recent",
-    Conference[]
-  >,
+  get conferences(): ClassifiedConferences {
+    return getConferences();
+  },
 } as const;
+
+export type { DisplayConference };
 
 export const navigation = [
   { label: "About", href: "/about/" },

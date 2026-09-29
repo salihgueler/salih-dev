@@ -17,7 +17,7 @@ type GeneratedLogCase = Readonly<{
   requestId: string;
   deckId: string;
   storedVersion: string;
-  buildId: string;
+  invalidationId: string;
   byteLength: number;
   pageCount: number;
 }>;
@@ -53,7 +53,7 @@ const VALIDATION_FIELDS = [
 ] as const;
 const STORE_FIELDS = [
   "action",
-  "buildId",
+  "invalidationId",
   "requestId",
   "storedVersion",
 ] as const;
@@ -87,7 +87,7 @@ const generatedLogCaseArbitrary: fc.Arbitrary<GeneratedLogCase> = fc.record({
   requestId: fc.uuid(),
   deckId: fc.uuid(),
   storedVersion: fc.uuid().map((value) => `"${value}"`),
-  buildId: fc.uuid().map((value) => `talk-publisher:${value}`),
+  invalidationId: fc.uuid().map((value) => `talk-invalidation:${value}`),
   byteLength: fc.integer({ min: 1, max: 26_214_400 }),
   pageCount: fc.integer({ min: 1, max: 10_000 }),
 });
@@ -276,42 +276,42 @@ test("Property 14: upload log records carry only permitted fields", () => {
         {
           action: TALK_LOG_ACTIONS.store,
           storedVersion: generated.storedVersion,
-          buildId: generated.buildId,
+          invalidationId: generated.invalidationId,
         },
         {
           action: TALK_LOG_ACTIONS.store,
           storedVersion: generated.storedVersion,
-          buildId: null,
+          invalidationId: null,
         },
         {
           action: TALK_LOG_ACTIONS.store,
           storedVersion: null,
-          buildId: generated.buildId,
+          invalidationId: generated.invalidationId,
         },
         {
           action: TALK_LOG_ACTIONS.store,
           storedVersion: null,
-          buildId: null,
+          invalidationId: null,
         },
         {
           action: TALK_LOG_ACTIONS.removal,
           storedVersion: generated.storedVersion,
-          buildId: generated.buildId,
+          invalidationId: generated.invalidationId,
         },
         {
           action: TALK_LOG_ACTIONS.removal,
           storedVersion: generated.storedVersion,
-          buildId: null,
+          invalidationId: null,
         },
         {
           action: TALK_LOG_ACTIONS.removal,
           storedVersion: null,
-          buildId: generated.buildId,
+          invalidationId: generated.invalidationId,
         },
         {
           action: TALK_LOG_ACTIONS.removal,
           storedVersion: null,
-          buildId: null,
+          invalidationId: null,
         },
       ];
       const previousAllowedCallerArns = process.env.CONTENT_ALLOWED_CALLER_ARNS;
@@ -398,7 +398,7 @@ test("Property 14: upload log records carry only permitted fields", () => {
         ...storeOutcomes.map((outcome) => ({
           action: outcome.action,
           storedVersion: outcome.storedVersion,
-          buildId: outcome.buildId,
+          invalidationId: outcome.invalidationId,
           requestId: generated.requestId,
         })),
       ]);

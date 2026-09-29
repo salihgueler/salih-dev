@@ -3,10 +3,6 @@ import {
   S3Client,
   S3ServiceException,
 } from "@aws-sdk/client-s3";
-import {
-  CodeBuildClient,
-  StartBuildCommand,
-} from "@aws-sdk/client-codebuild";
 import type {
   APIGatewayProxyEventV2WithIAMAuthorizer,
   APIGatewayProxyResultV2,
@@ -15,6 +11,8 @@ import type {
 
 import {
   CONTENT_KEY,
+  HOME_DYNAMIC_PATHS,
+  invalidateDynamicPaths,
   isExpectedEditor,
   jsonResponse,
   MAX_CONTENT_BYTES,
@@ -22,7 +20,6 @@ import {
   requestHeader,
 } from "./content-api-shared";
 
-const codebuild = new CodeBuildClient({});
 const s3 = new S3Client({});
 
 export const handler: Handler<
@@ -92,25 +89,21 @@ export const handler: Handler<
   }
 
   try {
-    const publication = await codebuild.send(
-      new StartBuildCommand({
-        projectName: process.env.PUBLISHER_PROJECT_NAME,
-      }),
-    );
+    const invalidation = await invalidateDynamicPaths(HOME_DYNAMIC_PATHS);
     console.log(
       JSON.stringify({
         action: "content-updated",
-        buildId: publication.build?.id,
         contentVersion: stored.VersionId,
+        invalidationId: invalidation.invalidationId,
         requestId: event.requestContext.requestId,
       }),
     );
     return jsonResponse(
       202,
       {
-        buildId: publication.build?.id,
         contentVersion: stored.VersionId,
-        status: "publishing",
+        invalidationId: invalidation.invalidationId,
+        status: "published",
       },
       {
         ...(stored.ETag ? { etag: stored.ETag } : {}),
@@ -120,10 +113,10 @@ export const handler: Handler<
       },
     );
   } catch (error) {
-    console.error("Content stored but publication failed to start", error);
+    console.error("Content stored but invalidation failed", error);
     return jsonResponse(503, {
       contentVersion: stored.VersionId,
-      error: "publication_not_started",
+      error: "invalidation_not_started",
     });
   }
 };

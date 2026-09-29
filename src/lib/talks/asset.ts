@@ -22,15 +22,15 @@ import type {
   SlidePath,
   TalkCriterion,
   ValidationIssue,
-} from "./model";
-import { PDF_SIGNATURE, readPdfDocument } from "./pdf-document.js";
+} from "./model.js";
+import { hasPdfSignature, PDF_SIGNATURE, readPdfDocument } from "./pdf-document.js";
 import {
   deriveSlidePublicUrl,
   TALK_SLIDE_PATH_PREFIX,
   validateSlidePath,
-} from "./validation";
+} from "./validation.js";
 
-export { hasPdfSignature, PDF_SIGNATURE } from "./pdf-document.js";
+export { PDF_SIGNATURE } from "./pdf-document.js";
 
 /** Repository-relative directory that holds every author-managed slide deck. */
 export const SLIDE_DIRECTORY_SEGMENTS = ["public", "talks", "slides"] as const;
@@ -69,6 +69,16 @@ export type SlideAssetValidationOptions = Readonly<{
    * working directory, which is the repository root for every `npm` script.
    */
   projectRoot?: string;
+  /**
+   * Skip the full pdfjs parse of the deck bytes, keeping every other check
+   * (safe path, existence, non-empty, PDF signature). The request-time renderer
+   * sets this: the deck was already fully validated when the Author published
+   * it, and re-parsing every PDF on each render would pull the pdfjs native
+   * canvas dependency into the Lambda and cost a full parse per request for a
+   * `pageCount` that is a build-time diagnostic and appears in no public
+   * representation. When set, an accepted asset reports `pageCount` 0.
+   */
+  skipPdfParse?: boolean;
 }>;
 
 function issue(
@@ -264,6 +274,31 @@ export async function validatePdfAsset(
       recordId,
       CRITERION_READABLE,
       `slides references ${resolved.slidePath}, which is empty and cannot be read as a PDF document`,
+    );
+  }
+
+  // The request-time renderer skips the full pdfjs parse: the deck was already
+  // validated at publish time, and re-parsing here would pull the native canvas
+  // dependency into the Lambda and re-parse every deck on each render for a
+  // page count that appears in no public representation. The cheap PDF-signature
+  // check still runs, so a non-PDF byte stream is still rejected.
+  if (options.skipPdfParse === true) {
+    if (!hasPdfSignature(bytes)) {
+      return rejected(
+        recordId,
+        CRITERION_PDF_DOCUMENT,
+        `PDF validation failed: ${resolved.slidePath} does not begin with the ${PDF_SIGNATURE} header and does not open as a PDF document`,
+      );
+    }
+
+    return accepted(
+      Object.freeze({
+        slidePath: resolved.slidePath,
+        slideFilePath: resolved.slideFilePath,
+        slidePublicUrl: resolved.slidePublicUrl,
+        byteLength,
+        pageCount: 0,
+      }),
     );
   }
 

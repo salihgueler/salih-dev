@@ -4,7 +4,7 @@ import { AccessLogFormat } from "aws-cdk-lib/aws-apigateway";
 import * as apigwv2 from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpIamAuthorizer } from "aws-cdk-lib/aws-apigatewayv2-authorizers";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
-import * as codebuild from "aws-cdk-lib/aws-codebuild";
+import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction, OutputFormat } from "aws-cdk-lib/aws-lambda-nodejs";
@@ -22,7 +22,7 @@ const API_TALK_RECORDS = "talks/records/*";
 export interface ContentApiProps {
   allowedCallerArns: string[];
   contentBucket: s3.IBucket;
-  publisher: codebuild.IProject;
+  distribution: cloudfront.IDistribution;
 }
 
 export class ContentApi extends Construct {
@@ -31,13 +31,17 @@ export class ContentApi extends Construct {
 
     const projectRoot = path.resolve(__dirname, "../..");
     const lockFile = path.resolve(__dirname, "../package-lock.json");
+    const distributionArn = `arn:${Stack.of(this).partition}:cloudfront::${Stack.of(this).account}:distribution/${props.distribution.distributionId}`;
     const commonEnvironment = {
       CONTENT_ALLOWED_CALLER_ARNS: props.allowedCallerArns.join(","),
       CONTENT_BUCKET_NAME: props.contentBucket.bucketName,
     };
-    const publisherEnvironment = {
+    // Write paths refresh the edge with a scoped CloudFront invalidation
+    // instead of starting the publisher, so a content change is live in
+    // seconds without a full rebuild.
+    const invalidatingEnvironment = {
       ...commonEnvironment,
-      PUBLISHER_PROJECT_NAME: props.publisher.projectName,
+      DISTRIBUTION_ID: props.distribution.distributionId,
     };
 
     const readLogs = new logs.LogGroup(this, "ReadLogs", {
@@ -66,7 +70,7 @@ export class ContentApi extends Construct {
       bundling: { minify: true, target: "node24" },
       depsLockFilePath: lockFile,
       entry: path.resolve(__dirname, "../functions/content-write.ts"),
-      environment: publisherEnvironment,
+      environment: invalidatingEnvironment,
       logGroup: writeLogs,
       memorySize: 256,
       projectRoot,
@@ -124,7 +128,7 @@ export class ContentApi extends Construct {
         },
         depsLockFilePath: lockFile,
         entry: path.resolve(__dirname, "../functions/talk-upload-complete.ts"),
-        environment: publisherEnvironment,
+        environment: invalidatingEnvironment,
         logGroup: talkUploadCompleteLogs,
         memorySize: 1769,
         projectRoot,
@@ -145,7 +149,7 @@ export class ContentApi extends Construct {
         bundling: { minify: true, target: "node24" },
         depsLockFilePath: lockFile,
         entry: path.resolve(__dirname, "../functions/talk-records.ts"),
-        environment: publisherEnvironment,
+        environment: invalidatingEnvironment,
         logGroup: talkRecordsLogs,
         memorySize: 256,
         projectRoot,
@@ -182,8 +186,8 @@ export class ContentApi extends Construct {
     );
     writeFunction.addToRolePolicy(
       new iam.PolicyStatement({
-        actions: ["codebuild:StartBuild"],
-        resources: [props.publisher.projectArn],
+        actions: ["cloudfront:CreateInvalidation"],
+        resources: [distributionArn],
       }),
     );
 
@@ -244,8 +248,8 @@ export class ContentApi extends Construct {
     );
     talkUploadCompleteFunction.addToRolePolicy(
       new iam.PolicyStatement({
-        actions: ["codebuild:StartBuild"],
-        resources: [props.publisher.projectArn],
+        actions: ["cloudfront:CreateInvalidation"],
+        resources: [distributionArn],
       }),
     );
 
@@ -272,8 +276,8 @@ export class ContentApi extends Construct {
     );
     talkRecordsFunction.addToRolePolicy(
       new iam.PolicyStatement({
-        actions: ["codebuild:StartBuild"],
-        resources: [props.publisher.projectArn],
+        actions: ["cloudfront:CreateInvalidation"],
+        resources: [distributionArn],
       }),
     );
 

@@ -82,6 +82,84 @@ function handler(event) {
 `;
 }
 
+export function viewerRenderRequestCode(domainName: string): string {
+  return `
+function qualityFor(accept, type) {
+  var values = accept.toLowerCase().split(",");
+  for (var index = 0; index < values.length; index += 1) {
+    var parts = values[index].trim().split(";");
+    if (parts[0] !== type) continue;
+    for (var parameter = 1; parameter < parts.length; parameter += 1) {
+      var value = parts[parameter].trim();
+      if (value.indexOf("q=") === 0) {
+        var quality = parseFloat(value.slice(2));
+        return isNaN(quality) ? 0 : Math.max(0, Math.min(1, quality));
+      }
+    }
+    return 1;
+  }
+  return 0;
+}
+
+function serializeQuery(query) {
+  var parts = [];
+  for (var key in query) {
+    if (!Object.prototype.hasOwnProperty.call(query, key)) continue;
+    var values = query[key].multiValue || [query[key]];
+    for (var index = 0; index < values.length; index += 1) {
+      parts.push(encodeURIComponent(key) + "=" + encodeURIComponent(values[index].value));
+    }
+  }
+  return parts.length ? "?" + parts.join("&") : "";
+}
+
+// The render origin serves the four dynamic routes with Astro SSR. Unlike the
+// S3 origin's function, this one never appends "/index.html": it keeps the
+// clean route path the SSR server matches (/ and /talks/), and only negotiates
+// the Markdown alternate (/index.md, /talks/index.md). The www redirect is kept
+// so both origins behave the same for a www visitor.
+function markdownAlternate(uri) {
+  if (uri === "/") return "/index.md";
+  if (uri === "/talks" || uri === "/talks/") return "/talks/index.md";
+  return null;
+}
+
+function handler(event) {
+  var request = event.request;
+  var host = request.headers.host ? request.headers.host.value.toLowerCase() : "";
+
+  if (host === "www.${domainName}") {
+    return {
+      statusCode: 301,
+      statusDescription: "Moved Permanently",
+      headers: {
+        location: {
+          value: "https://${domainName}" + request.uri + serializeQuery(request.querystring)
+        }
+      }
+    };
+  }
+
+  // Normalize the talks route to its trailing-slash form the SSR server matches.
+  if (request.uri === "/talks") request.uri = "/talks/";
+
+  var accept = request.headers.accept ? request.headers.accept.value : "";
+  var markdownQuality = qualityFor(accept, "text/markdown");
+  var htmlQuality = Math.max(
+    qualityFor(accept, "text/html"),
+    qualityFor(accept, "application/xhtml+xml")
+  );
+  var alternate = markdownAlternate(request.uri);
+
+  if (alternate && markdownQuality > 0 && markdownQuality > htmlQuality) {
+    request.uri = alternate;
+  }
+
+  return request;
+}
+`;
+}
+
 export function viewerResponseCode(domainName: string): string {
   return `
 function representationPaths(uri) {
