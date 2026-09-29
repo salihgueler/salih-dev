@@ -2,6 +2,7 @@ import { Duration } from "aws-cdk-lib";
 import * as appconfig from "aws-cdk-lib/aws-appconfig";
 import * as cloudwatch from "aws-cdk-lib/aws-cloudwatch";
 import type * as lambda from "aws-cdk-lib/aws-lambda";
+import * as logs from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 
 /**
@@ -22,7 +23,10 @@ import { Construct } from "constructs";
  *   back if it fires;
  * - a CloudWatch alarm on the render Lambda's errors (and its p95 duration) that
  *   is attached to the environment as a monitor. The L2 `Monitor.fromCloudWatchAlarm`
- *   auto-generates the IAM role AppConfig needs to read the alarm.
+ *   auto-generates the IAM role AppConfig needs to read the alarm;
+ * - a third alarm on handled render failures, counted by a metric filter on
+ *   the render log group, because a failed flag-on request falls back to the
+ *   baked page and never reaches the `Errors` metric.
  *
  * Everything here is provisioning only; no configuration is turned on. The
  * multi-variant targeting rule and the `split` rollout rule (Part 2) are set on
@@ -39,7 +43,26 @@ export interface FeatureFlagsProps {
    * from this function's `Errors` and `Duration` metrics.
    */
   readonly renderFunction: lambda.IFunction;
+  /**
+   * The render Lambda's log group. A metric filter counts the handled render
+   * failures it logs (`outcome` of `on_path_fallback`, `render_error`,
+   * `middleware_error`, `load_error`). Those requests return a response rather
+   * than throwing, so they never reach the function's `Errors` metric.
+   */
+  readonly renderLogGroup: logs.ILogGroup;
 }
+
+/**
+ * The render log outcomes that mean the on path failed. `on_path_fallback` is
+ * logged by the middleware when a flag-on request falls back to the baked page;
+ * the other three are logged by the render handler.
+ */
+export const RENDER_FAILURE_OUTCOMES = [
+  "on_path_fallback",
+  "render_error",
+  "middleware_error",
+  "load_error",
+] as const;
 
 /** The flag key the render Lambda reads and the rollout turns on. */
 export const RENDER_FLAG_KEY = "renderFromBackend";
@@ -98,6 +121,36 @@ export class FeatureFlags extends Construct {
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
     });
 
+    // Handled render failures. A flag-on request whose content read or render
+    // fails now falls back to the baked page and returns 200, so neither the
+    // Lambda `Errors` metric nor CloudFront 5xx sees it. The logged outcome is
+    // the only signal, so it drives its own alarm and monitor.
+    const failureFilter = new logs.MetricFilter(this, "RenderFailureFilter", {
+      logGroup: props.renderLogGroup,
+      metricNamespace: "SalihDev/Render",
+      metricName: "RenderFailures",
+      metricValue: "1",
+      defaultValue: 0,
+      filterPattern: logs.FilterPattern.any(
+        ...RENDER_FAILURE_OUTCOMES.map((outcome) =>
+          logs.FilterPattern.stringValue("$.outcome", "=", outcome),
+        ),
+      ),
+    });
+    const failureAlarm = new cloudwatch.Alarm(this, "RenderFailuresAlarm", {
+      alarmDescription:
+        "The render on path is failing (falling back to baked pages); roll back the renderFromBackend rollout.",
+      comparisonOperator:
+        cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      evaluationPeriods: 1,
+      metric: failureFilter.metric({
+        period: Duration.minutes(1),
+        statistic: cloudwatch.Stats.SUM,
+      }),
+      threshold: 1,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
     this.environment = new appconfig.Environment(this, "Environment", {
       application: this.application,
       environmentName: APPCONFIG_ENVIRONMENT_NAME,
@@ -107,6 +160,7 @@ export class FeatureFlags extends Construct {
       monitors: [
         appconfig.Monitor.fromCloudWatchAlarm(errorAlarm),
         appconfig.Monitor.fromCloudWatchAlarm(latencyAlarm),
+        appconfig.Monitor.fromCloudWatchAlarm(failureAlarm),
       ],
     });
 

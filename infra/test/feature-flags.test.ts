@@ -76,6 +76,40 @@ test("the environment has CloudWatch alarm monitors (auto-generated role)", () =
   });
 });
 
+test("handled render failures drive their own alarm and AppConfig monitor", () => {
+  const t = deliveryTemplate();
+  // The metric filter counts every failure outcome the render path logs.
+  const filters = Object.values(t.findResources("AWS::Logs::MetricFilter"));
+  const failure = filters.find((f) => {
+    const transforms = (
+      f.Properties as {
+        MetricTransformations: { MetricName: string }[];
+      }
+    ).MetricTransformations;
+    return transforms.some((m) => m.MetricName === "RenderFailures");
+  });
+  assert.ok(failure !== undefined, "a RenderFailures metric filter exists");
+  const pattern = (failure.Properties as { FilterPattern: string })
+    .FilterPattern;
+  for (const outcome of [
+    "on_path_fallback",
+    "render_error",
+    "middleware_error",
+    "load_error",
+  ]) {
+    assert.ok(pattern.includes(outcome), `filter matches ${outcome}`);
+  }
+  t.hasResourceProperties("AWS::CloudWatch::Alarm", {
+    MetricName: "RenderFailures",
+    Namespace: "SalihDev/Render",
+    Threshold: 1,
+  });
+  // Three monitors: Lambda errors, p95 latency, handled render failures.
+  const envs = Object.values(t.findResources("AWS::AppConfig::Environment"));
+  const monitors = (envs[0].Properties as { Monitors: unknown[] }).Monitors;
+  assert.equal(monitors.length, 3);
+});
+
 test("the deployment strategy has a final bake time", () => {
   const t = deliveryTemplate();
   t.hasResourceProperties("AWS::AppConfig::DeploymentStrategy", {

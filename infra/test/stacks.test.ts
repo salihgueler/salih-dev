@@ -1000,9 +1000,9 @@ test("adds privacy-first analytics and low-cost monitoring", () => {
   delivery.resourceCountIs("AWS::Synthetics::Canary", 0);
 
   // Build failure alarm plus CloudFront 4xx/5xx and two homepage-check alarms
-  // (5), plus the two render-rollout alarms (render errors + p95 latency) that
-  // AppConfig watches as monitors during the rollout (7 total).
-  delivery.resourceCountIs("AWS::CloudWatch::Alarm", 7);
+  // (5), plus the three render-rollout alarms (render errors, p95 latency and
+  // handled render failures) that AppConfig watches as monitors (8 total).
+  delivery.resourceCountIs("AWS::CloudWatch::Alarm", 8);
 
   // Selected log fields must exclude visitor identifiers.
   const deliveries = delivery.findResources("AWS::Logs::Delivery");

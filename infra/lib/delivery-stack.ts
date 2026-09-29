@@ -300,6 +300,7 @@ export class SalihDevDeliveryStack extends Stack {
     // final bake time so an alarm during rollout rolls the flag back.
     const featureFlags = new FeatureFlags(this, "FeatureFlags", {
       renderFunction,
+      renderLogGroup,
     });
 
     // The AppConfig L2 auto-generates the environment's alarm-read role from

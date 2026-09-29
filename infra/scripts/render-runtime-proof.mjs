@@ -21,6 +21,7 @@
  *   3. extension down -> no agent on 2772; the handler falls to the baked page.
  *   4. cookie mint  -> a request without a vid cookie gets a Set-Cookie with
  *                      Secure; HttpOnly; SameSite=Lax.
+ *   5. flag ON, content read fails -> the on path falls back to the baked page.
  *
  * Usage (inside the container): node render-runtime-proof.mjs
  * The package (index.mjs + server/ + client/) is mounted at /var/task.
@@ -207,6 +208,21 @@ async function main() {
     setCookiePresent: vidCookie !== undefined,
     attributes: vidCookie ?? null,
   };
+
+  // 5. flag ON but the content read fails (site content object removed) ->
+  //    the on path falls back to the baked page instead of a 502.
+  OBJECTS.delete(`${CONTENT_BUCKET}/site/content.v1.json`);
+  agent = await startAgentStub(true);
+  const readFail = await invoke(handler, "/talks/");
+  const readFailBody = readFail.isBase64Encoded
+    ? Buffer.from(readFail.body, "base64").toString("utf8")
+    : readFail.body;
+  results.flag_on_read_failure = {
+    status: readFail.statusCode,
+    renderPath: headerOf(readFail, "x-render-path"),
+    servedBaked: readFailBody === BAKED_TALKS_HTML,
+  };
+  await new Promise((r) => agent.close(r));
 
   await new Promise((r) => s3.close(r));
   process.stdout.write(JSON.stringify(results, null, 2) + "\n");

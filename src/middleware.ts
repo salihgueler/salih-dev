@@ -154,8 +154,9 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
 /**
  * Resolves the dynamic route's content from S3 and renders inside the
- * request-scoped overrides. A missing bucket configuration or a hard read
- * failure returns a 5xx that CloudFront does not cache as a success.
+ * request-scoped overrides. When the flag is off for this visitor, or the on
+ * path fails with a 5xx (a content read or validation failure, or a failed
+ * render), it serves the baked page from the site bucket instead.
  */
 async function renderDynamic(
   context: APIContext,
@@ -180,26 +181,7 @@ async function renderDynamic(
   // this route from the site bucket, with the same headers as today plus the
   // `x-render-path: static` marker and the vid cookie when freshly minted.
   if (!flagOn) {
-    const siteBucket = process.env.SITE_BUCKET_NAME;
-    if (siteBucket === undefined || siteBucket === "") {
-      return failure(500, "render configuration error");
-    }
-    const baked = await serveBakedPage(
-      s3(),
-      siteBucket,
-      context.url.pathname,
-      successCacheControl(),
-    );
-    if (setCookie !== null && baked.status < 500) {
-      const headers = new Headers(baked.headers);
-      headers.append("Set-Cookie", setCookie);
-      return new Response(baked.body, {
-        status: baked.status,
-        statusText: baked.statusText,
-        headers,
-      });
-    }
-    return baked;
+    return serveOffPath(context.url.pathname, setCookie);
   }
 
   // On path: render through Astro exactly as PR #10 does, reading the route's
@@ -235,17 +217,60 @@ async function renderDynamic(
     rendered = await run();
   } catch {
     // The content bucket could not be read (or the content failed validation).
-    // Return a 5xx the edge will not cache; with stale-if-error on the good
-    // responses, CloudFront keeps serving the last good response instead.
-    return failure(502, "render error");
+    // During the rollout the edge caches nothing, so stale-if-error cannot
+    // cover this; fall back to the baked page the off path serves instead.
+    logOnPathFallback(context.url.pathname);
+    return serveOffPath(context.url.pathname, setCookie);
   }
 
-  // A render that itself produced a server error must not be cached as success.
+  // A render that itself produced a server error falls back the same way. A
+  // 4xx (an unknown post, say) is a real answer and is passed through.
   if (rendered.status >= 500) {
-    return failure(rendered.status, "render error");
+    logOnPathFallback(context.url.pathname);
+    return serveOffPath(context.url.pathname, setCookie);
   }
 
   return decorateOnPath(rendered, setCookie);
+}
+
+/**
+ * Logs a flag-on request that fell back to the baked page. The visitor still
+ * gets a 200, so this line is the only failure signal: a metric filter on the
+ * render log group counts it and drives the AppConfig rollback alarm. It
+ * carries only the route and the outcome, like the render handler's own lines.
+ */
+function logOnPathFallback(route: string): void {
+  console.error(JSON.stringify({ route, outcome: "on_path_fallback" }));
+}
+
+/**
+ * Serves the baked static page for a dynamic route from the site bucket. Used
+ * when the flag is off for this visitor, and as the fallback when the on path
+ * fails with a 5xx. A missing baked object is a 404 and a site-bucket failure a
+ * `no-store` 502, both from `serveBakedPage`.
+ */
+async function serveOffPath(
+  pathname: string,
+  setCookie: string | null,
+): Promise<Response> {
+  const siteBucket = process.env.SITE_BUCKET_NAME;
+  if (siteBucket === undefined || siteBucket === "") {
+    return failure(500, "render configuration error");
+  }
+  const baked = await serveBakedPage(
+    s3(),
+    siteBucket,
+    pathname,
+    successCacheControl(),
+  );
+  if (setCookie === null || baked.status >= 500) return baked;
+  const headers = new Headers(baked.headers);
+  headers.append("Set-Cookie", setCookie);
+  return new Response(baked.body, {
+    status: baked.status,
+    statusText: baked.statusText,
+    headers,
+  });
 }
 
 /** Adds the representation and security headers the dev preview advertises. */
