@@ -116,12 +116,25 @@ function serializeQuery(query) {
 // The render origin serves the four dynamic routes with Astro SSR. Unlike the
 // S3 origin's function, this one never appends "/index.html": it keeps the
 // clean route path the SSR server matches (/ and /talks/), and only negotiates
-// the Markdown alternate (/index.md, /talks/index.md). The www redirect is kept
-// so both origins behave the same for a www visitor.
+// the Markdown alternate (/index.md, /talks/index.md, /blog/index.md, and the
+// /blog|categories|tags/<slug>.md forms). The www redirect is kept so both
+// origins behave the same for a www visitor.
 function markdownAlternate(uri) {
   if (uri === "/") return "/index.md";
   if (uri === "/talks" || uri === "/talks/") return "/talks/index.md";
-  return null;
+  if (uri === "/blog" || uri === "/blog/") return "/blog/index.md";
+  var match = uri.match(/^\\/(blog|categories|tags)\\/([^/]+)\\/?$/);
+  return match ? "/" + match[1] + "/" + match[2] + ".md" : null;
+}
+
+// Clean-path forms the SSR server matches use a trailing slash; normalize the
+// no-slash variants of the dynamic route roots and of a blog/category/tag item.
+function normalizeRenderPath(uri) {
+  if (uri === "/talks") return "/talks/";
+  if (uri === "/blog") return "/blog/";
+  var item = uri.match(/^\\/(blog|categories|tags)\\/([^/.]+)$/);
+  if (item) return "/" + item[1] + "/" + item[2] + "/";
+  return uri;
 }
 
 function handler(event) {
@@ -140,8 +153,8 @@ function handler(event) {
     };
   }
 
-  // Normalize the talks route to its trailing-slash form the SSR server matches.
-  if (request.uri === "/talks") request.uri = "/talks/";
+  // Normalize clean-path forms to the trailing-slash the SSR server matches.
+  request.uri = normalizeRenderPath(request.uri);
 
   var accept = request.headers.accept ? request.headers.accept.value : "";
   var markdownQuality = qualityFor(accept, "text/markdown");
@@ -155,6 +168,82 @@ function handler(event) {
     request.uri = alternate;
   }
 
+  return request;
+}
+`;
+}
+
+/**
+ * Viewer-request function for the API-authored slide-deck behavior.
+ *
+ * The public slide path is `/talks/slides/api/<deckId>.pdf`; the deck object
+ * lives in the content bucket at `talks/decks/<deckId>.pdf`. This function
+ * rewrites the request URI to that key so the deck is served straight from the
+ * content bucket through CloudFront, with no render Lambda and no build. Only
+ * the exact `<deckId>` shape this feature generates (a lowercase RFC 4122 v4
+ * UUID) is accepted; anything else is answered with a 404 at the edge, so the
+ * behavior can never be walked into another key or another prefix of the
+ * content bucket even though the bucket policy already scopes CloudFront's read
+ * to `talks/decks/*`.
+ */
+export function viewerDeckRequestCode(domainName: string): string {
+  return `
+var DECK_PATH = /^\\/talks\\/slides\\/api\\/([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\\.pdf$/;
+
+function handler(event) {
+  var request = event.request;
+  var host = request.headers.host ? request.headers.host.value.toLowerCase() : "";
+
+  if (host === "www.${domainName}") {
+    return {
+      statusCode: 404,
+      statusDescription: "Not Found"
+    };
+  }
+
+  var match = request.uri.match(DECK_PATH);
+  if (!match) {
+    return {
+      statusCode: 404,
+      statusDescription: "Not Found"
+    };
+  }
+
+  request.uri = "/talks/decks/" + match[1] + ".pdf";
+  return request;
+}
+`;
+}
+
+/**
+ * Viewer-request function for the blog-hero-image behavior.
+ *
+ * A post references `https://salih.dev/images/blog/<file>`; the object lives in
+ * the content bucket at `images/<file>`. This function rewrites the public path
+ * to that key by dropping the `/blog` segment, so the image is served straight
+ * from the content bucket through CloudFront with no render Lambda and no build.
+ * A path with a traversal segment or an unexpected shape is answered with a 404
+ * at the edge, so the behavior can never be walked to another key or prefix
+ * even though the bucket policy already scopes CloudFront's read to `images/*`.
+ */
+export function viewerImageRequestCode(domainName: string): string {
+  return `
+var IMAGE_PATH = /^\\/images\\/blog\\/([^/][^?#]*)$/;
+
+function handler(event) {
+  var request = event.request;
+  var host = request.headers.host ? request.headers.host.value.toLowerCase() : "";
+
+  if (host === "www.${domainName}") {
+    return { statusCode: 404, statusDescription: "Not Found" };
+  }
+
+  var match = request.uri.match(IMAGE_PATH);
+  if (!match || request.uri.indexOf("..") !== -1) {
+    return { statusCode: 404, statusDescription: "Not Found" };
+  }
+
+  request.uri = "/images/" + match[1];
   return request;
 }
 `;

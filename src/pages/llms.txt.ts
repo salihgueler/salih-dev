@@ -3,7 +3,10 @@ import type { APIRoute } from "astro";
 import { site } from "../config/site";
 import { getPublishedPosts, postUrl } from "../lib/content";
 import { contentSignal } from "../lib/discovery";
+import { PRERENDER_DYNAMIC_ROUTE } from "../lib/dynamic-route";
 import { getPublishedTalksSnapshot } from "../lib/talks/gateway-astro";
+
+export const prerender = PRERENDER_DYNAMIC_ROUTE;
 
 export const GET: APIRoute = async () => {
   const posts = await getPublishedPosts();

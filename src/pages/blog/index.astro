@@ -2,6 +2,9 @@
 import PostCard from "../../components/PostCard.astro";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { getPublishedPosts } from "../../lib/content";
+import { PRERENDER_DYNAMIC_ROUTE } from "../../lib/dynamic-route";
+
+export const prerender = PRERENDER_DYNAMIC_ROUTE;
 
 const posts = await getPublishedPosts();
 ---

@@ -28,7 +28,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -46,7 +46,7 @@ const resolvedOut = path.resolve(outDir);
 rmSync(resolvedOut, { force: true, recursive: true });
 mkdirSync(resolvedOut, { recursive: true });
 
-// The four dynamic route files declare `export const prerender =
+// The dynamic route files declare `export const prerender =
 // PRERENDER_DYNAMIC_ROUTE;`. Astro only honours a literal boolean when it scans
 // a route's prerender export, and that scan does not run this project's Vite
 // transforms, so the flag is patched to a literal `false` on disk for the SSR
@@ -57,20 +57,98 @@ const DYNAMIC_ROUTE_FILES = [
   "src/pages/index.md.ts",
   "src/pages/talks/index.astro",
   "src/pages/talks/index.md.ts",
+  "src/pages/blog/index.astro",
+  "src/pages/blog/index.md.ts",
+  "src/pages/blog/[slug].astro",
+  "src/pages/blog/[slug].md.ts",
+  "src/pages/categories/[category].astro",
+  "src/pages/categories/[category].md.ts",
+  "src/pages/tags/[tag].astro",
+  "src/pages/tags/[tag].md.ts",
+  "src/pages/rss.xml.ts",
+  "src/pages/sitemap.xml.ts",
+  "src/pages/llms.txt.ts",
+  "src/pages/llms-full.txt.ts",
 ];
 const SENTINEL = "export const prerender = PRERENDER_DYNAMIC_ROUTE;";
 const SSR_LITERAL = "export const prerender = false;";
 
-const patched = DYNAMIC_ROUTE_FILES.map((relative) => {
+// This script edits shared source files in place (patch the sentinels, build,
+// restore). CDK asset bundling can invoke it CONCURRENTLY — a test suite that
+// synthesizes the stack many times runs several bundles at once — and two
+// concurrent runs would interleave their patch/restore and leave a source file
+// holding another run's stale copy (or a patched `false`). A cross-process lock
+// serializes the whole patch->build->restore critical section so only one run
+// touches the tree at a time. The lock is a directory (mkdir is atomic and
+// fails if it exists); a stale lock older than the timeout is reclaimed.
+const LOCK_DIR = path.join(repoRoot, ".cache", "render-build.lock");
+// A render build is seconds; a lock older than STALE_MS was left by a killed
+// run (CDK can terminate bundling), so reclaim it. WAIT_MS is how long a run
+// waits for the lock before giving up — long enough for many serialized builds
+// (a synth-heavy test run) to drain ahead of it.
+const LOCK_STALE_MS = 3 * 60 * 1000;
+const LOCK_WAIT_MS = 20 * 60 * 1000;
+
+function sleepSync(ms) {
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    // Busy-wait: this script is a short-lived build subprocess, and Atomics
+    // wait on a shared buffer is the only synchronous sleep without a dep.
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+    break;
+  }
+}
+
+function acquireLock() {
+  mkdirSync(path.dirname(LOCK_DIR), { recursive: true });
+  const start = Date.now();
+  for (;;) {
+    try {
+      mkdirSync(LOCK_DIR);
+      writeFileSync(path.join(LOCK_DIR, "pid"), String(process.pid));
+      return;
+    } catch {
+      // Reclaim a lock left by a crashed run.
+      try {
+        const created = statSync(LOCK_DIR).mtimeMs;
+        if (Date.now() - created > LOCK_STALE_MS) {
+          rmSync(LOCK_DIR, { force: true, recursive: true });
+          continue;
+        }
+      } catch {
+        continue;
+      }
+      if (Date.now() - start > LOCK_WAIT_MS) {
+        throw new Error("Timed out waiting for the render-build lock");
+      }
+      sleepSync(100);
+    }
+  }
+}
+
+function releaseLock() {
+  rmSync(LOCK_DIR, { force: true, recursive: true });
+}
+
+acquireLock();
+
+// Read and validate EVERY route first, before patching any, so a missing
+// sentinel aborts the run with the whole tree still intact. Only once all four
+// are known good does the patch loop run, and `restoreRoutes` (in the finally
+// below) undoes exactly the ones actually patched — so a crash mid-build, or a
+// SIGKILL, can never leave a route stuck at the SSR literal and break the
+// static build. The lock serialises concurrent CDK synths against the same tree.
+const routeSources = DYNAMIC_ROUTE_FILES.map((relative) => {
   const file = path.join(repoRoot, relative);
   const original = readFileSync(file, "utf8");
   if (!original.includes(SENTINEL)) {
+    releaseLock();
     throw new Error(`Expected prerender sentinel in ${relative}`);
   }
-  writeFileSync(file, original.replace(SENTINEL, SSR_LITERAL));
   return { file, original };
 });
 
+const patched = [];
 function restoreRoutes() {
   for (const entry of patched) {
     writeFileSync(entry.file, entry.original);
@@ -78,6 +156,11 @@ function restoreRoutes() {
 }
 
 try {
+  for (const entry of routeSources) {
+    writeFileSync(entry.file, entry.original.replace(SENTINEL, SSR_LITERAL));
+    patched.push(entry);
+  }
+
   // 1. Build the Astro SSR server (adapter + on-demand dynamic routes).
   execFileSync("npm", ["run", "build"], {
     cwd: repoRoot,
@@ -86,6 +169,7 @@ try {
   });
 } finally {
   restoreRoutes();
+  releaseLock();
 }
 
 // 2. Copy the SSR server and its client assets into the package, siblings so

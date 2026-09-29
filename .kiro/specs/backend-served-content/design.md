@@ -2,6 +2,8 @@
 
 ## Overview
 
+> **Scope revision (2026-09-29).** The dynamic surface now covers every page whose content lives in the content bucket, not only Talks, Location and Events. The blog index, posts, categories, tags, `rss.xml`, `sitemap.xml`, `llms.txt` and `llms-full.txt` also render on request from `posts/`. Slide decks and blog images are served straight from the content bucket through CloudFront, so the render Lambda never downloads a PDF. A missing `site/content.v1.json` is a read failure (uncached 502), never a fall back to repo defaults. The daily dev.to import writes to S3 and invalidates without a site build. Where a later section says otherwise, this revision and `tasks.md` win.
+
 This feature moves three content surfaces — the Talks archive, the Author's current Location, and the Events list — from the baked static build to request-time rendering, so a content change is live in seconds without a publisher build. It does this by adding one read-only Render Lambda as a second CloudFront origin on the existing `SalihDevDelivery` distribution, behind cache behaviors that route only the dynamic routes to it. Every other page stays static and continues to publish only through the CodeBuild publisher.
 
 The design's load-bearing property is byte-parity with the static build. The Talks HTML, its JSON-LD, and its Markdown alternate are already produced by pure, side-effect-free modules (`src/lib/talks/gateway.ts` pure helpers, `projection.ts`, `markdown.ts`) from one validated published snapshot; the Location and Events display is produced by pure classification (`src/config/site-content.ts`, `src/config/site.ts`, `LocationSidebar.astro`'s markup) from one validated content object. The Render Lambda reuses those exact modules, reading the same S3 objects the publisher materializes, so what it emits at request time matches what the static build would have baked.
@@ -56,8 +58,9 @@ flowchart LR
 
 ### Route classification
 
-- **Dynamic routes (Render Lambda origin):** `/talks/` (HTML), `/talks/index.md`, `/talks/` with `Accept: text/markdown`; the home page `/` (HTML), `/index.md`, and `/` with `Accept: text/markdown`.
-- **Static routes (S3 origin, unchanged):** every other path, including `/about/`, `/contact/`, `/blog/**`, `/categories/**`, `/tags/**`, `rss.xml`, `sitemap.xml`, `llms.txt`, `llms-full.txt`, `.well-known/**`, `_astro/**`, and all assets.
+- **Dynamic routes (Render Lambda origin):** the home page `/` and `/index.md`; `/talks/` and `/talks/index.md`; `/blog/**`, `/categories/**`, `/tags/**` with their `.md` alternates; `rss.xml`, `sitemap.xml`, `llms.txt`, `llms-full.txt`.
+- **Content bucket through CloudFront (no Lambda):** `/talks/slides/api/<deckId>.pdf` from `talks/decks/`, `/images/blog/*` from `images/`.
+- **Static routes (S3 origin, unchanged):** `/about/`, `/contact/`, the 404 page, `/skills/**`, `/api/**`, `.well-known/**`, `_astro/**`, and the remaining assets.
 
 The dynamic set is exactly the routes whose *primary* content is Talks, Location, or Events. It is expressed as a small number of CloudFront cache behaviors with explicit path patterns, so the default behavior (the S3 origin) is untouched for everything else.
 
@@ -149,7 +152,7 @@ No new persistent data. The Render Lambda reads existing objects:
 
 ## Error handling
 
-- Missing `site/content.v1.json`: fall back to the packaged `site-content.default.json` so the home page still renders defaults (the same fallback the build uses), rather than erroring.
+- Missing `site/content.v1.json`: a read failure. The middleware returns a `no-store` 502 and CloudFront keeps serving the last good page through `stale-if-error`. Request-time rendering never uses the packaged defaults.
 - Missing talks prefix or empty: render the approved empty archive.
 - S3 `AccessDenied` masking a missing key: prevented by prefix-scoped `ListBucket`, so absence is a clean not-found.
 - Unreadable/invalid content the validator rejects: return a 5xx that CloudFront does not cache as success; `stale-if-error` serves the last good response meanwhile.

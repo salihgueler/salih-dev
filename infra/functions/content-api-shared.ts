@@ -13,11 +13,33 @@ export const MAX_CONTENT_BYTES = MAX_JSON_BODY_BYTES;
 
 /**
  * Dynamic routes served at request time by the render function. A write
- * invalidates exactly the paths its content backs, so the next request at the
- * edge reflects the new content within seconds without a publisher build.
+ * invalidates every path its content backs, so the next request at the edge
+ * reflects the new content within seconds without a publisher build.
+ *
+ * The site content (location and events) appears on the home page and in the
+ * JSON-LD of every rendered page, so a site write clears every dynamic route.
+ * Talks appear on the Talks archive and in the sitemap and `llms` listings.
  */
-export const HOME_DYNAMIC_PATHS = ["/", "/index.md"] as const;
-export const TALKS_DYNAMIC_PATHS = ["/talks/", "/talks/index.md"] as const;
+export const HOME_DYNAMIC_PATHS = [
+  "/",
+  "/index.md",
+  "/talks/",
+  "/talks/index.md",
+  "/blog/*",
+  "/categories/*",
+  "/tags/*",
+  "/rss.xml",
+  "/sitemap.xml",
+  "/llms.txt",
+  "/llms-full.txt",
+] as const;
+export const TALKS_DYNAMIC_PATHS = [
+  "/talks/",
+  "/talks/index.md",
+  "/sitemap.xml",
+  "/llms.txt",
+  "/llms-full.txt",
+] as const;
 
 const cloudfront = new CloudFrontClient({});
 

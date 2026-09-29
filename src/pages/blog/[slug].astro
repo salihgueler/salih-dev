@@ -6,17 +6,46 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 import {
   formatDate,
   getPostStaticPaths,
+  getPublishedPosts,
   slugify,
+  type PublishedPost,
 } from "../../lib/content";
+import { requestTimePostHtml } from "../../lib/blog/posts-source";
+import { PRERENDER_DYNAMIC_ROUTE } from "../../lib/dynamic-route";
 
+export const prerender = PRERENDER_DYNAMIC_ROUTE;
 export const getStaticPaths = getPostStaticPaths;
 
 interface Props {
-  post: CollectionEntry<"blog">;
+  post?: CollectionEntry<"blog">;
 }
 
-const { post } = Astro.props;
-const { Content } = await render(post);
+// Two shapes resolve one post. The static build prerenders every post and
+// passes the collection entry as `Astro.props.post`, whose body is rendered by
+// `astro:content`'s build-time `render()`. The request-time renderer serves the
+// route on demand with no `getStaticPaths` props, so it resolves the post from
+// the URL param against the request-scoped published-posts override and renders
+// the body from the HTML that override already compiled (byte-identical to
+// `render()` for the same source). A slug with no matching post is a 404.
+const slug = Astro.params.slug ?? "";
+const buildTimePost = Astro.props.post;
+const post: CollectionEntry<"blog"> | PublishedPost | undefined =
+  buildTimePost ??
+  (await getPublishedPosts()).find((entry) => entry.id === slug);
+
+if (post === undefined) {
+  return new Response("Post not found\n", { status: 404 });
+}
+
+// Build path: the compiled Content component from the real entry. Request path:
+// the pre-compiled HTML from the override (the entry has no render metadata).
+const BuildTimeContent = buildTimePost
+  ? (await render(buildTimePost)).Content
+  : null;
+const requestTimeHtml = BuildTimeContent === null
+  ? requestTimePostHtml(post.id)
+  : null;
+
 const canonical = post.data.canonical ?? new URL(`/blog/${post.id}/`, Astro.site);
 const sources = [
   ...(post.data.originalUrl
@@ -154,7 +183,13 @@ const articleStructuredData = [
     </figure>
 
     <div class="article-body">
-      <Content />
+      {
+        BuildTimeContent ? (
+          <BuildTimeContent />
+        ) : (
+          <Fragment set:html={requestTimeHtml} />
+        )
+      }
     </div>
 
     <ul class="tag-list" aria-label="Post tags">

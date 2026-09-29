@@ -199,18 +199,28 @@ protected; deleting a CDK stack does not delete retained content.
 
 ## 9. Manage location and events through the content API
 
-> **Backend-served content.** The Talks archive, the current location, and the
-> events are served at request time by a read-only render Lambda that is a
-> second CloudFront origin (its Function URL is IAM-authed and fronted by Origin
-> Access Control, so it is never public). The render function reads the content
-> bucket and reuses the same validated gateway and serializers the static build
-> uses, so its output matches the baked pages. Consequently the three content
-> write paths — `PUT /v1/content`, talk-upload completion, and talk removal — no
-> longer start the CodeBuild publisher: each stores its object and issues a
-> scoped CloudFront invalidation of exactly the affected dynamic routes, so the
-> change is live within seconds. The publisher remains the sole path for code,
-> design, blog, and other static changes, and its scheduled and manual builds
-> are unchanged. Blog and all other pages stay static.
+> **Backend-served content.** The home page, the Talks archive, the blog index,
+> posts, categories, tags, and the machine-readable listings (`rss.xml`,
+> `sitemap.xml`, `llms.txt`, `llms-full.txt`), each with its Markdown alternate,
+> are served at request time by a read-only render Lambda that is a second
+> CloudFront origin (its Function URL is IAM-authed and fronted by Origin Access
+> Control, so it is never public). It reads `site/content.v1.json`,
+> `talks/records/`, and `posts/` from the content bucket and reuses the same
+> pages and serializers the static build uses, so its output matches the baked
+> pages. Slide PDFs (`/talks/slides/api/*`) and blog images (`/images/blog/*`)
+> are served straight from the content bucket through CloudFront; the render
+> Lambda never downloads a PDF.
+>
+> The three content write paths (`PUT /v1/content`, talk-upload completion, and
+> talk removal) store their object and issue a scoped CloudFront invalidation,
+> so the change is live within seconds. The daily `DevImporter` CodeBuild
+> project imports dev.to posts into `posts/` and `images/` and invalidates the
+> blog routes, also without a site build. The publisher is now only for code and
+> design changes; start it manually.
+>
+> `site/content.v1.json` must exist before this is deployed. If it is missing,
+> every dynamic route returns an uncached 502 instead of falling back to repo
+> content.
 
 
 The content API accepts SigV4 requests only from:

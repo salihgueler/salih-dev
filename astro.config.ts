@@ -1,10 +1,8 @@
-import { unified } from "@astrojs/markdown-remark";
 import node from "@astrojs/node";
 import sitemap from "@astrojs/sitemap";
 import { defineConfig } from "astro/config";
-import remarkDirective from "remark-directive";
 
-import remarkYouTube from "./src/lib/remark-youtube";
+import { markdownProcessor, SHIKI_CONFIG } from "./src/lib/markdown-config";
 
 /**
  * salih.dev builds in two shapes from one source tree (backend-served-content):
@@ -30,13 +28,7 @@ export default defineConfig({
   ...(ssr ? { adapter: node({ mode: "middleware" }) } : {}),
   integrations: [sitemap()],
   markdown: {
-    processor: unified({
-      gfm: true,
-      remarkPlugins: [remarkDirective, remarkYouTube],
-    }),
-    shikiConfig: {
-      theme: "github-light",
-      wrap: true,
-    },
+    processor: markdownProcessor,
+    shikiConfig: SHIKI_CONFIG,
   },
 });

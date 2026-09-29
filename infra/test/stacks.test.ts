@@ -220,8 +220,8 @@ test("creates static delivery and daily publishing resources", () => {
   const { delivery } = createStacks();
 
   delivery.resourceCountIs("AWS::CloudFront::Distribution", 1);
-  delivery.resourceCountIs("AWS::CloudFront::Function", 3);
-  delivery.resourceCountIs("AWS::CodeBuild::Project", 1);
+  delivery.resourceCountIs("AWS::CloudFront::Function", 5);
+  delivery.resourceCountIs("AWS::CodeBuild::Project", 2);
   delivery.resourceCountIs("AWS::Scheduler::Schedule", 1);
   delivery.resourceCountIs("AWS::SQS::Queue", 1);
   delivery.hasResourceProperties("AWS::Scheduler::Schedule", {
@@ -719,15 +719,34 @@ test("adds a read-only render origin behind CloudFront for the dynamic routes", 
   );
   assert.ok(listStatement !== undefined);
   assert.deepEqual(listStatement.Condition, {
-    StringLike: { "s3:prefix": ["talks/records/*", "talks/decks/*"] },
+    StringLike: {
+      "s3:prefix": ["talks/records/*", "talks/decks/*", "posts/*"],
+    },
   });
+
+  // The render role reads the site object, talk records and blog posts, and
+  // never a deck object (decks are served by CloudFront from the bucket).
+  const getStatement = renderStatements.find((statement) =>
+    (typeof statement.Action === "string"
+      ? [statement.Action]
+      : (statement.Action as string[])
+    ).includes("s3:GetObject"),
+  );
+  assert.ok(getStatement !== undefined);
+  const getResources = JSON.stringify(getStatement.Resource);
+  for (const allowed of ["site/content.v1.json", "talks/records/*", "posts/*"]) {
+    assert.ok(getResources.includes(allowed), `render role must read ${allowed}`);
+  }
+  assert.ok(
+    !getResources.includes("talks/decks"),
+    "render role must not read deck objects",
+  );
 
   // The render origin is a Function URL with IAM auth (OAC-fronted, non-public).
   delivery.hasResourceProperties("AWS::Lambda::Url", { AuthType: "AWS_IAM" });
 
-  // The distribution routes the four dynamic paths to the render origin and
-  // keeps a separate default (S3) behavior. The home route "/" is dynamic for
-  // its location and events; the talks routes for the archive.
+  // Every route whose content lives in the content bucket is routed to the
+  // render origin; the default (S3) behavior keeps the rest.
   delivery.hasResourceProperties("AWS::CloudFront::Distribution", {
     DistributionConfig: Match.objectLike({
       CacheBehaviors: Match.arrayWith([
@@ -735,8 +754,168 @@ test("adds a read-only render origin behind CloudFront for the dynamic routes", 
         Match.objectLike({ PathPattern: "/index.md" }),
         Match.objectLike({ PathPattern: "/talks/" }),
         Match.objectLike({ PathPattern: "/talks/index.md" }),
+        Match.objectLike({ PathPattern: "/blog/*" }),
+        Match.objectLike({ PathPattern: "/categories/*" }),
+        Match.objectLike({ PathPattern: "/tags/*" }),
+        Match.objectLike({ PathPattern: "/rss.xml" }),
+        Match.objectLike({ PathPattern: "/sitemap.xml" }),
+        Match.objectLike({ PathPattern: "/llms.txt" }),
+        Match.objectLike({ PathPattern: "/llms-full.txt" }),
       ]),
     }),
+  });
+});
+
+test("serves API-authored slide decks from the content bucket, scoped to talks/decks", () => {
+  const { state, delivery } = createStacks();
+
+  // A dedicated behavior serves the public slide path from the content bucket.
+  delivery.hasResourceProperties("AWS::CloudFront::Distribution", {
+    DistributionConfig: Match.objectLike({
+      CacheBehaviors: Match.arrayWith([
+        Match.objectLike({
+          PathPattern: "/talks/slides/api/*",
+          AllowedMethods: ["GET", "HEAD"],
+          FunctionAssociations: Match.arrayWith([
+            Match.objectLike({ EventType: "viewer-request" }),
+          ]),
+        }),
+      ]),
+    }),
+  });
+
+  // CloudFront's read of the content bucket is scoped to talks/decks/* only:
+  // no statement grants s3:GetObject on the whole bucket or any other prefix.
+  const policies = state.findResources("AWS::S3::BucketPolicy");
+  const statements = Object.values(policies).flatMap(
+    (resource) =>
+      resource.Properties.PolicyDocument.Statement as Array<{
+        Action: string | string[];
+        Resource: unknown;
+        Principal?: { Service?: string };
+      }>,
+  );
+  const cloudfrontReads = statements.filter(
+    (statement) =>
+      statement.Principal?.Service === "cloudfront.amazonaws.com" &&
+      (typeof statement.Action === "string"
+        ? [statement.Action]
+        : statement.Action
+      ).includes("s3:GetObject"),
+  );
+  // Two prefix-scoped CloudFront reads exist (decks and blog images); neither is
+  // a whole-bucket grant. Select the deck one and assert it targets only decks.
+  const deckReads = cloudfrontReads.filter((statement) =>
+    JSON.stringify(statement.Resource).includes("talks/decks/*"),
+  );
+  assert.equal(deckReads.length, 1);
+  const resourceJson = JSON.stringify(deckReads[0].Resource);
+  assert.ok(
+    resourceJson.includes("talks/decks/*"),
+    "CloudFront deck read must target talks/decks/*",
+  );
+  for (const forbidden of [
+    "site/content.v1.json",
+    "talks/records/",
+    "talks/pending/",
+    "posts/",
+    "images/",
+    "state/",
+  ]) {
+    assert.ok(
+      !resourceJson.includes(forbidden),
+      `CloudFront deck read must not reach ${forbidden}`,
+    );
+  }
+  // No CloudFront read is a whole-bucket grant.
+  for (const statement of cloudfrontReads) {
+    const res = JSON.stringify(statement.Resource);
+    assert.ok(
+      !/Arn(13DAF1CD)?"\]\},"\/\*"/.test(res) && !res.endsWith('"/*"]]'),
+      `CloudFront read must not be a whole-bucket grant: ${res}`,
+    );
+  }
+});
+
+test("serves blog hero images from the content bucket, scoped to images", () => {
+  const { state, delivery } = createStacks();
+
+  delivery.hasResourceProperties("AWS::CloudFront::Distribution", {
+    DistributionConfig: Match.objectLike({
+      CacheBehaviors: Match.arrayWith([
+        Match.objectLike({
+          PathPattern: "/images/blog/*",
+          FunctionAssociations: Match.arrayWith([
+            Match.objectLike({ EventType: "viewer-request" }),
+          ]),
+        }),
+      ]),
+    }),
+  });
+
+  // The API catalog is static capability data, so it stays on the default (S3)
+  // behavior and is never routed to the render origin.
+  const distribution = Object.values(
+    delivery.findResources("AWS::CloudFront::Distribution"),
+  )[0];
+  const behaviorPatterns = (
+    distribution.Properties.DistributionConfig.CacheBehaviors as Array<{
+      PathPattern: string;
+    }>
+  ).map((behavior) => behavior.PathPattern);
+  assert.ok(
+    !behaviorPatterns.includes("/api/catalog.json"),
+    "/api/catalog.json must stay static (no dynamic behavior)",
+  );
+
+  const policies = state.findResources("AWS::S3::BucketPolicy");
+  const statements = Object.values(policies).flatMap(
+    (resource) =>
+      resource.Properties.PolicyDocument.Statement as Array<{
+        Action: string | string[];
+        Resource: unknown;
+        Principal?: { Service?: string };
+      }>,
+  );
+  const imageReads = statements.filter(
+    (statement) =>
+      statement.Principal?.Service === "cloudfront.amazonaws.com" &&
+      JSON.stringify(statement.Resource).includes("images/*"),
+  );
+  assert.equal(imageReads.length, 1);
+  const res = JSON.stringify(imageReads[0].Resource);
+  for (const forbidden of ["posts/", "talks/", "site/", "state/"]) {
+    assert.ok(!res.includes(forbidden), `image read must not reach ${forbidden}`);
+  }
+});
+
+test("imports DEV posts without a build or a site-bucket sync", () => {
+  const { delivery } = createStacks();
+
+  const projects = delivery.findResources("AWS::CodeBuild::Project");
+  const specs = Object.values(projects).map((p) =>
+    JSON.stringify(p.Properties.Source.BuildSpec),
+  );
+  const importSpec = specs.find(
+    (s) => s.includes("import:dev") && !s.includes("npm run build"),
+  );
+  assert.ok(
+    importSpec !== undefined,
+    "an import-only project (import:dev, no npm run build) must exist",
+  );
+  assert.ok(
+    !importSpec.includes("SITE_BUCKET") && !importSpec.includes("sync dist/"),
+    "the importer must not sync the site bucket or dist/",
+  );
+  assert.ok(importSpec.includes("/blog/*"));
+  assert.ok(importSpec.includes("/images/blog/*"));
+  assert.ok(
+    !importSpec.includes('"/*"'),
+    "the importer must invalidate scoped paths, not /*",
+  );
+
+  delivery.hasResourceProperties("AWS::Scheduler::Schedule", {
+    ScheduleExpression: "cron(15 3 * * ? *)",
   });
 });
 

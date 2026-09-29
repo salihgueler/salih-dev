@@ -1,9 +1,16 @@
-import type { CollectionEntry } from "astro:content";
-
 import { site } from "../config/site";
-import { formatDate, getPublishedPosts, postUrl, slugify } from "./content";
+import {
+  formatDate,
+  getPublishedPosts,
+  postUrl,
+  slugify,
+  type PublishedPost,
+} from "./content";
 import { getPublishedTalksSnapshot } from "./talks/gateway-astro";
 import { serializeTalksMarkdown } from "./talks/markdown";
+
+/** A published blog post as the Markdown serializer consumes it. */
+type BlogPost = PublishedPost;
 
 export async function markdownForPath(
   pathname: string,
@@ -67,7 +74,7 @@ export async function markdownForPath(
   return null;
 }
 
-function homeDocument(posts: CollectionEntry<"blog">[]): string {
+function homeDocument(posts: BlogPost[]): string {
   const conferences = [
     ...site.conferences.upcoming.map(
       (conference) =>
@@ -130,12 +137,12 @@ function contactDocument(): string {
 function archiveDocument(
   title: string,
   description: string,
-  posts: CollectionEntry<"blog">[],
+  posts: BlogPost[],
 ): string {
   return [`# ${title}`, "", description, "", postList(posts), ""].join("\n");
 }
 
-function postList(posts: CollectionEntry<"blog">[]): string {
+function postList(posts: BlogPost[]): string {
   return posts
     .map((post) =>
       [
@@ -151,9 +158,9 @@ function postList(posts: CollectionEntry<"blog">[]): string {
     .join("\n\n");
 }
 
-function postDocument(post: CollectionEntry<"blog">): string {
+function postDocument(post: BlogPost): string {
   const body = replaceYouTubeDirectives(post.body ?? "");
-  const tags = post.data.tags.map((tag) => `#${tag}`).join(", ");
+  const tags = post.data.tags.map((tag: string) => `#${tag}`).join(", ");
   const sources = [
     ...(post.data.originalUrl
       ? [{ name: "DEV Community", url: post.data.originalUrl }]

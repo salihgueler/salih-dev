@@ -79,6 +79,20 @@ export type SlideAssetValidationOptions = Readonly<{
    * representation. When set, an accepted asset reports `pageCount` 0.
    */
   skipPdfParse?: boolean;
+  /**
+   * Skip every filesystem read of the deck (existence, bytes, non-empty, PDF
+   * signature) and validate only the slide path shape. The request-time
+   * renderer sets this: the deck's presence is already proven by the caller's
+   * key-only `ListObjectsV2` of `talks/decks/` (the render path only keeps a
+   * record whose deck id is in that listing), so the deck never needs to be
+   * downloaded (`s3:GetObject`) or written to disk at render time. The deck was
+   * fully validated when the Author published it, and the accepted asset's
+   * byte-level diagnostics (`byteLength`, `pageCount`) appear in no public
+   * representation, so an accepted asset reports both as 0. When set,
+   * `skipPdfParse` is implied. The static build never sets this: it reads and
+   * fully parses the real deck bytes exactly as before.
+   */
+  skipAssetRead?: boolean;
 }>;
 
 function issue(
@@ -208,6 +222,24 @@ export async function validatePdfAsset(
       recordId,
       CRITERION_ASSOCIATION,
       `slides must reference exactly one safe root-relative .pdf path beneath ${TALK_SLIDE_PATH_PREFIX}`,
+    );
+  }
+
+  // The request-time renderer proves the deck exists from a key-only
+  // `ListObjectsV2` of `talks/decks/`, never by reading the object. With
+  // `skipAssetRead` set, the safe path has been validated above and no
+  // filesystem read runs, so the render path performs no deck `GetObject` and
+  // writes no deck to disk. The byte-level diagnostics appear in no public
+  // representation, so the accepted asset reports both as 0.
+  if (options.skipAssetRead === true) {
+    return accepted(
+      Object.freeze({
+        slidePath: resolved.slidePath,
+        slideFilePath: resolved.slideFilePath,
+        slidePublicUrl: resolved.slidePublicUrl,
+        byteLength: 0,
+        pageCount: 0,
+      }),
     );
   }
 

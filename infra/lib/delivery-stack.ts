@@ -32,8 +32,9 @@ import type { Construct } from "constructs";
 import { Analytics } from "./analytics";
 import { ContentApi } from "./content-api";
 import { suppressBasicLambdaLoggingPolicy } from "./lambda-log-suppressions";
-import { viewerRequestCode, viewerRenderRequestCode, viewerResponseCode } from "./edge-functions";
+import { viewerRequestCode, viewerRenderRequestCode, viewerResponseCode, viewerDeckRequestCode, viewerImageRequestCode } from "./edge-functions";
 import { Monitoring } from "./monitoring";
+import { PrefixScopedS3Origin } from "./prefix-scoped-s3-origin";
 
 export interface SalihDevDeliveryStackProps extends StackProps {
   readonly contentBucket: s3.IBucket;
@@ -105,6 +106,14 @@ export class SalihDevDeliveryStack extends Stack {
         viewerResponseCode(props.domainName),
       ),
       comment: "Advertise canonical HTML and Markdown representations.",
+      runtime: cloudfront.FunctionRuntime.JS_2_0,
+    });
+    const deckRequestFunction = new cloudfront.Function(this, "ViewerDeckRequest", {
+      code: cloudfront.FunctionCode.fromInline(
+        viewerDeckRequestCode(props.domainName),
+      ),
+      comment:
+        "Rewrite /talks/slides/api/<id>.pdf to the talks/decks/ content-bucket key; 404 anything else.",
       runtime: cloudfront.FunctionRuntime.JS_2_0,
     });
 
@@ -189,15 +198,18 @@ export class SalihDevDeliveryStack extends Stack {
       timeout: Duration.seconds(29),
     });
 
-    // Read-only, least-privilege: GetObject on the content object and the talk
-    // prefixes, plus prefix-scoped ListBucket so a missing key surfaces as a
-    // clean 404 rather than an AccessDenied masked as a 500.
+    // Read-only, least-privilege. GetObject on the content object, the talk
+    // records and the blog posts; prefix-scoped ListBucket on every prefix it
+    // lists so a missing key surfaces as a clean 404 rather than an
+    // AccessDenied masked as a 500. It lists `talks/decks/` (to decide deck
+    // presence) but never reads a deck object: decks are served straight from
+    // the content bucket through CloudFront, never through this Lambda.
     renderFunction.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ["s3:ListBucket"],
         conditions: {
           StringLike: {
-            "s3:prefix": ["talks/records/*", "talks/decks/*"],
+            "s3:prefix": ["talks/records/*", "talks/decks/*", "posts/*"],
           },
         },
         resources: [props.contentBucket.bucketArn],
@@ -209,7 +221,7 @@ export class SalihDevDeliveryStack extends Stack {
         resources: [
           props.contentBucket.arnForObjects("site/content.v1.json"),
           props.contentBucket.arnForObjects("talks/records/*"),
-          props.contentBucket.arnForObjects("talks/decks/*"),
+          props.contentBucket.arnForObjects("posts/*"),
         ],
       }),
     );
@@ -225,10 +237,10 @@ export class SalihDevDeliveryStack extends Stack {
           id: "AwsSolutions-IAM5",
           appliesTo: [
             "Resource::<ContentBucket52D4B12C.Arn>/talks/records/*",
-            "Resource::<ContentBucket52D4B12C.Arn>/talks/decks/*",
+            "Resource::<ContentBucket52D4B12C.Arn>/posts/*",
           ],
           reason:
-            "The render function reads only the two code-owned talk prefixes it renders; the object wildcard is scoped to exactly those prefixes and grants read (GetObject) only, with no write, delete, or list outside the prefixes.",
+            "The render function reads only the code-owned talk-record and blog-post prefixes it renders plus the single site content object; each object wildcard is scoped to exactly that prefix and grants read (GetObject) only, with no write or delete. ListBucket is separately scoped by an s3:prefix condition to the prefixes it enumerates.",
         },
       ],
       true,
@@ -286,17 +298,143 @@ export class SalihDevDeliveryStack extends Stack {
       viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
     };
 
+    // --- API-authored slide-deck origin (content bucket, read-only, scoped) ---
+    // Decks are served straight from `talks/decks/` so a newly published talk's
+    // PDF is reachable without a build. The origin's OAC read is scoped to that
+    // one prefix, and the behavior's viewer-request function rewrites the public
+    // slide path to the object key, so no other content-bucket prefix is
+    // exposed. Decks are immutable once published (a new deck is a new id), so
+    // the edge caches them for a day and the write path never has to invalidate.
+    const deckOriginAccessControl = new cloudfront.S3OriginAccessControl(
+      this,
+      "DeckOriginAccessControl",
+    );
+    const deckOrigin = PrefixScopedS3Origin.forPrefix(props.contentBucket, {
+      keyPrefix: "talks/decks/",
+      originAccessControl: deckOriginAccessControl,
+    });
+    const deckCachePolicy = new cloudfront.CachePolicy(this, "DeckCachePolicy", {
+      cachePolicyName: "salih-dev-decks",
+      defaultTtl: Duration.hours(24),
+      maxTtl: Duration.days(365),
+      minTtl: Duration.hours(1),
+      headerBehavior: cloudfront.CacheHeaderBehavior.none(),
+      cookieBehavior: cloudfront.CacheCookieBehavior.none(),
+      queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
+      enableAcceptEncodingGzip: false,
+      enableAcceptEncodingBrotli: false,
+    });
+    const deckBehavior: cloudfront.BehaviorOptions = {
+      allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
+      cachePolicy: deckCachePolicy,
+      compress: false,
+      functionAssociations: [
+        {
+          eventType: cloudfront.FunctionEventType.VIEWER_REQUEST,
+          function: deckRequestFunction,
+        },
+      ],
+      origin: deckOrigin,
+      responseHeadersPolicy: responseHeaders,
+      viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+    };
+
+    // --- Blog hero images (content bucket, read-only, scoped) ---
+    // Blog posts reference `https://salih.dev/images/blog/<file>.webp`. Those
+    // objects live in the content bucket at `images/<file>.webp` (the publisher
+    // syncs `public/images/blog/` there), so a post imported at request time can
+    // reference an image that is live without a build. The origin's OAC read is
+    // scoped to `images/*`, and the behavior strips the `/blog` path segment so
+    // the request maps to the `images/` key; no other content-bucket prefix is
+    // reachable through it. Images are content-addressed by file name, so the
+    // edge caches them for a day.
+    const imageOriginAccessControl = new cloudfront.S3OriginAccessControl(
+      this,
+      "ImageOriginAccessControl",
+    );
+    const imageOrigin = PrefixScopedS3Origin.forPrefix(props.contentBucket, {
+      keyPrefix: "images/",
+      originAccessControl: imageOriginAccessControl,
+      // The public path is `/images/blog/<file>`; the object key is
+      // `images/<file>`. Origin path `/images` + the behavior stripping
+      // `/images/blog` is avoided by rewriting in the viewer function instead,
+      // so the origin serves the bucket root and the OAC scopes the read.
+    });
+    const imageCachePolicy = new cloudfront.CachePolicy(
+      this,
+      "ImageCachePolicy",
+      {
+        cachePolicyName: "salih-dev-blog-images",
+        defaultTtl: Duration.hours(24),
+        maxTtl: Duration.days(365),
+        minTtl: Duration.hours(1),
+        headerBehavior: cloudfront.CacheHeaderBehavior.none(),
+        cookieBehavior: cloudfront.CacheCookieBehavior.none(),
+        queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
+        enableAcceptEncodingGzip: false,
+        enableAcceptEncodingBrotli: false,
+      },
+    );
+    const imageRequestFunction = new cloudfront.Function(
+      this,
+      "ViewerImageRequest",
+      {
+        code: cloudfront.FunctionCode.fromInline(
+          viewerImageRequestCode(props.domainName),
+        ),
+        comment:
+          "Rewrite /images/blog/<file> to the images/ content-bucket key; 404 traversal.",
+        runtime: cloudfront.FunctionRuntime.JS_2_0,
+      },
+    );
+    const imageBehavior: cloudfront.BehaviorOptions = {
+      allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
+      cachePolicy: imageCachePolicy,
+      compress: false,
+      functionAssociations: [
+        {
+          eventType: cloudfront.FunctionEventType.VIEWER_REQUEST,
+          function: imageRequestFunction,
+        },
+      ],
+      origin: imageOrigin,
+      responseHeadersPolicy: responseHeaders,
+      viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+    };
+
     const distribution = new cloudfront.Distribution(this, "Distribution", {
       additionalBehaviors: {
-        // The four dynamic routes are served on request by the render origin;
-        // everything else falls through to the S3 default behavior. The home
-        // route "/" is served dynamically for its location and events, while
-        // the render viewer-request function keeps the clean route paths ("/",
-        // "/talks/") the SSR server matches and negotiates the ".md" alternates.
+        // The render origin serves every route whose content lives in the
+        // content bucket: the home page (location, events, latest posts), the
+        // Talks archive, the blog index, posts, categories and tags, and the
+        // machine-readable listings, each with its Markdown alternate. The
+        // render viewer-request function keeps the clean route paths the SSR
+        // server matches and negotiates the ".md" alternates. Every other page
+        // (about, contact, 404, skills, the API catalog) stays static and is
+        // served from S3 by the default behavior.
         "/": renderBehavior,
         "/index.md": renderBehavior,
         "/talks/": renderBehavior,
         "/talks/index.md": renderBehavior,
+        "/talks": renderBehavior,
+        "/blog": renderBehavior,
+        "/blog/*": renderBehavior,
+        "/categories/*": renderBehavior,
+        "/tags/*": renderBehavior,
+        "/rss.xml": renderBehavior,
+        "/sitemap.xml": renderBehavior,
+        "/llms.txt": renderBehavior,
+        "/llms-full.txt": renderBehavior,
+        // Blog hero images are served straight from the content bucket's
+        // `images/` prefix.
+        "/images/blog/*": imageBehavior,
+        // API-authored slide decks are served straight from the content
+        // bucket's `talks/decks/` prefix, so a newly published talk's PDF link
+        // works without a build. The viewer-request function rewrites the public
+        // slide path to the object key and 404s anything that is not the exact
+        // deck-id shape; the origin's OAC read is scoped to `talks/decks/*`, so
+        // no other prefix of the content bucket is reachable through it.
+        "/talks/slides/api/*": deckBehavior,
       },
       certificate,
       defaultBehavior: {
@@ -477,6 +615,90 @@ export class SalihDevDeliveryStack extends Stack {
       }),
     );
 
+    // --- Import-only dev.to sync (no build, no site publish) ---
+    // Because the blog is served at request time from S3 `posts/` + `images/`,
+    // the daily dev.to import no longer needs a full site build: it imports new
+    // and edited posts, writes the changed `posts/` and `images/` objects to the
+    // content bucket, and invalidates exactly the blog and listing routes plus
+    // the affected images. The next request renders the change from S3 within
+    // seconds. Full builds (`Publisher`, run on demand) stay for code, design,
+    // and template changes. CodeBuild — not a Lambda — runs the import because
+    // it reuses the repo's own toolchain and the existing `scripts/import-dev.mjs`
+    // unchanged, with network egress to dev.to; a Lambda would have to repackage
+    // that script, its dependencies, and egress with no reuse.
+    const importLogGroup = new logs.LogGroup(this, "ImportLogGroup", {
+      logGroupName: "/aws/codebuild/salih-dev-dev-importer",
+      removalPolicy: RemovalPolicy.DESTROY,
+      retention: logs.RetentionDays.ONE_MONTH,
+    });
+    const importer = new codebuild.Project(this, "DevImporter", {
+      buildSpec: codebuild.BuildSpec.fromObject({
+        version: "0.2",
+        phases: {
+          install: {
+            "runtime-versions": { nodejs: 22 },
+            commands: ["npm ci"],
+          },
+          pre_build: {
+            commands: [
+              "mkdir -p .cache src/content/blog public/images/blog",
+              'aws s3 sync "s3://$CONTENT_BUCKET/posts/" src/content/blog/ --only-show-errors',
+              'aws s3 sync "s3://$CONTENT_BUCKET/images/" public/images/blog/ --only-show-errors',
+              'aws s3 cp "s3://$CONTENT_BUCKET/state/dev-sync-manifest.json" .cache/dev-sync-manifest.json --only-show-errors || echo "No existing DEV manifest; running initial sync."',
+            ],
+          },
+          build: {
+            // Import only. No `npm run build`, no `verify:build`, no dist/.
+            commands: ["npm run import:dev"],
+          },
+          post_build: {
+            commands: [
+              'if [ "$CODEBUILD_BUILD_SUCCEEDING" -ne 1 ]; then echo "Import failed; skipping sync."; exit 1; fi',
+              // Write the imported posts and images to the content bucket only.
+              // The site bucket is never touched, and no build output is synced.
+              'aws s3 sync src/content/blog/ "s3://$CONTENT_BUCKET/posts/" --delete --only-show-errors',
+              'aws s3 sync public/images/blog/ "s3://$CONTENT_BUCKET/images/" --delete --only-show-errors',
+              'aws s3 cp .cache/dev-sync-manifest.json "s3://$CONTENT_BUCKET/state/dev-sync-manifest.json" --cache-control "no-cache" --content-type "application/json" --only-show-errors',
+              // Invalidate exactly the request-time routes that reflect posts and
+              // the blog images, never "/*": the render origin re-renders these
+              // from S3 on the next request, and the images are re-fetched.
+              'aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" --paths "/" "/index.md" "/blog/*" "/categories/*" "/tags/*" "/rss.xml" "/sitemap.xml" "/llms.txt" "/llms-full.txt" "/images/blog/*" >/dev/null',
+            ],
+          },
+        },
+      }),
+      concurrentBuildLimit: 1,
+      environment: {
+        buildImage: codebuild.LinuxLambdaBuildImage.AMAZON_LINUX_2023_NODE_22,
+        computeType: codebuild.ComputeType.LAMBDA_1GB,
+      },
+      environmentVariables: {
+        CONTENT_BUCKET: { value: props.contentBucket.bucketName },
+        DEV_MANIFEST_PATH: { value: ".cache/dev-sync-manifest.json" },
+        DISTRIBUTION_ID: { value: distribution.distributionId },
+        SITE_URL: { value: `https://${props.domainName}` },
+      },
+      logging: {
+        cloudWatch: { logGroup: importLogGroup, prefix: "import" },
+      },
+      source: codebuild.Source.s3({
+        bucket: source.bucket,
+        path: source.s3ObjectKey,
+      }),
+    });
+    source.grantRead(importer);
+    // The importer reads and writes only the content bucket; it never touches
+    // the site bucket, so it is not granted access to it.
+    props.contentBucket.grantReadWrite(importer);
+    importer.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["cloudfront:CreateInvalidation"],
+        resources: [
+          `arn:${Stack.of(this).partition}:cloudfront::${Stack.of(this).account}:distribution/${distribution.distributionId}`,
+        ],
+      }),
+    );
+
     new ContentApi(this, "ContentApi", {
       allowedCallerArns: [rootEditorArn],
       contentBucket: props.contentBucket,
@@ -491,12 +713,12 @@ export class SalihDevDeliveryStack extends Stack {
     });
     new scheduler.Schedule(this, "DailyPublishSchedule", {
       description:
-        "Checks DEV for new or edited posts and republishes salih.dev.",
+        "Imports new or edited DEV posts to the content bucket and invalidates the request-time blog routes, without a full site build.",
       schedule: scheduler.ScheduleExpression.cron({
         hour: "3",
         minute: "15",
       }),
-      target: new schedulerTargets.CodeBuildStartBuild(project, {
+      target: new schedulerTargets.CodeBuildStartBuild(importer, {
         deadLetterQueue: schedulerDlq,
         maxEventAge: Duration.hours(1),
         retryAttempts: 2,
@@ -508,11 +730,12 @@ export class SalihDevDeliveryStack extends Stack {
       enforceSSL: true,
     });
     const buildAlarm = new cloudwatch.Alarm(this, "BuildFailureAlarm", {
-      alarmDescription: "The daily salih.dev synchronization build failed.",
+      alarmDescription:
+        "The daily salih.dev DEV import failed (posts were not synced to the content bucket).",
       comparisonOperator:
         cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
       evaluationPeriods: 1,
-      metric: project.metricFailedBuilds({
+      metric: importer.metricFailedBuilds({
         period: Duration.days(1),
       }),
       threshold: 1,
@@ -565,6 +788,22 @@ export class SalihDevDeliveryStack extends Stack {
           id: "AwsSolutions-IAM5",
           reason:
             "CDK grant methods scope wildcard object paths and action families to the application source, content, and site buckets. CodeBuild also requires generated log stream and report-group suffixes.",
+        },
+      ],
+      true,
+    );
+    NagSuppressions.addResourceSuppressions(
+      importer,
+      [
+        {
+          id: "AwsSolutions-CB4",
+          reason:
+            "CodeBuild uses AWS-managed encryption and produces no build artifacts. A dedicated customer-managed KMS key would add recurring cost without protecting persistent build output.",
+        },
+        {
+          id: "AwsSolutions-IAM5",
+          reason:
+            "CDK grant methods scope wildcard object paths and action families to the application source and the content bucket (the importer never touches the site bucket). CodeBuild also requires generated log stream and report-group suffixes.",
         },
       ],
       true,

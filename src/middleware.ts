@@ -4,6 +4,7 @@ import type { APIContext, MiddlewareNext } from "astro";
 import { S3Client } from "@aws-sdk/client-s3";
 
 import { withSiteContent } from "./config/site-content-source";
+import { withPublishedPosts } from "./lib/blog/posts-source";
 import {
   canonicalUrl,
   contentSignal,
@@ -17,6 +18,7 @@ import {
   FAILURE_CACHE_CONTROL,
 } from "./lib/render-cache";
 import {
+  resolvePublishedPostsFromS3,
   resolvePublishedTalksFromS3,
   resolveSiteContentScope,
 } from "./lib/render-content";
@@ -25,16 +27,44 @@ import { withPublishedTalksSnapshot } from "./lib/talks/gateway-astro";
 /**
  * The dynamic routes and the content each needs at request time.
  *
- * `home` routes need the site content (location + events); `talks` routes need
- * the published snapshot. The pathname is the resolved origin-request path the
- * CloudFront viewer-request function produces, so `/talks/index.md` reaches the
- * origin as `/talks/index.md` and `/` as `/`.
+ * Every page's layout embeds the location in its JSON-LD, so every HTML route
+ * and every listing that embeds a page document reads the site content. The
+ * home page and its Markdown alternate also list the latest posts. `talks`
+ * routes need the published talk snapshot; blog, category, and tag routes need
+ * the published posts. The machine-readable listings combine sources:
+ * `rss.xml`, `sitemap.xml`, `llms.txt`, and `llms-full.txt` read posts and
+ * talks. Nothing here falls back to content baked into the bundle. The pathname
+ * is the resolved origin-request path the CloudFront viewer-request function
+ * produces.
  */
-type DynamicKind = "home" | "talks";
+type RouteNeeds = Readonly<{ site: boolean; talks: boolean; posts: boolean }>;
 
-function dynamicKind(pathname: string): DynamicKind | null {
-  if (pathname === "/" || pathname === "/index.md") return "home";
-  if (pathname === "/talks/" || pathname === "/talks/index.md") return "talks";
+const BLOG_PATH =
+  /^\/(blog|categories|tags)(\/|\/[^/]+\/|\/[^/]+\.md)?$/;
+
+function routeNeeds(pathname: string): RouteNeeds | null {
+  if (pathname === "/" || pathname === "/index.md") {
+    return { site: true, talks: false, posts: true };
+  }
+  if (pathname === "/talks/" || pathname === "/talks/index.md") {
+    return { site: true, talks: true, posts: false };
+  }
+  // Blog index/post, category, and tag routes (HTML and `.md` alternate).
+  if (
+    pathname === "/blog/" ||
+    pathname === "/blog/index.md" ||
+    BLOG_PATH.test(pathname)
+  ) {
+    return { site: true, talks: false, posts: true };
+  }
+  if (
+    pathname === "/rss.xml" ||
+    pathname === "/sitemap.xml" ||
+    pathname === "/llms.txt" ||
+    pathname === "/llms-full.txt"
+  ) {
+    return { site: true, talks: true, posts: true };
+  }
   return null;
 }
 
@@ -78,8 +108,9 @@ function failure(status: number, body: string): Response {
  * inside the request-scoped overrides, so the same `.astro` pages that read the
  * shared config and gateway produce live content. It runs inside the SSR bundle
  * and therefore shares module identity with those readers, which is what makes
- * the override visible to them. A missing content object falls back to the
- * packaged default; a successful render carries an edge-cacheable Cache-Control
+ * the override visible to them. A missing content object is a read failure,
+ * never a fall back to packaged defaults; a successful render carries an
+ * edge-cacheable Cache-Control
  * with `stale-if-error`, and a read failure returns a `no-store` 5xx so the
  * edge keeps serving the last good response instead of caching the error.
  *
@@ -115,8 +146,8 @@ async function renderDynamic(
   context: APIContext,
   next: MiddlewareNext,
 ): Promise<Response> {
-  const kind = dynamicKind(context.url.pathname);
-  if (kind === null) return next();
+  const needs = routeNeeds(context.url.pathname);
+  if (needs === null) return next();
 
   const bucket = process.env.CONTENT_BUCKET_NAME;
   if (bucket === undefined || bucket === "") {
@@ -128,17 +159,30 @@ async function renderDynamic(
 
   let rendered: Response;
   try {
-    if (kind === "home") {
-      const scope = await resolveSiteContentScope(s3(), bucket, today);
-      rendered = await withSiteContent(scope, () => next());
-    } else {
-      const snapshot = resolvePublishedTalksFromS3(s3(), bucket);
-      // Await once here so a read/validation failure becomes a 5xx rather than
-      // a rejected promise surfacing mid-render; the pages then read the
-      // resolved snapshot synchronously through the override.
-      await snapshot;
-      rendered = await withPublishedTalksSnapshot(snapshot, () => next());
+    // Resolve every override this route needs from S3 first, so a read or
+    // validation failure becomes a 5xx here rather than a rejection surfacing
+    // mid-render. Then nest the request scopes so each reader (site config,
+    // talks gateway, posts) sees the request's content through its own seam.
+    const [scope, talks, posts] = await Promise.all([
+      needs.site ? resolveSiteContentScope(s3(), bucket, today) : null,
+      needs.talks ? resolvePublishedTalksFromS3(s3(), bucket) : null,
+      needs.posts ? resolvePublishedPostsFromS3(s3(), bucket) : null,
+    ]);
+
+    let run = (): Response | Promise<Response> => next();
+    if (scope !== null) {
+      const inner = run;
+      run = () => withSiteContent(scope, inner);
     }
+    if (talks !== null) {
+      const inner = run;
+      run = () => withPublishedTalksSnapshot(Promise.resolve(talks), inner);
+    }
+    if (posts !== null) {
+      const inner = run;
+      run = () => withPublishedPosts(posts, inner);
+    }
+    rendered = await run();
   } catch {
     // The content bucket could not be read (or the content failed validation).
     // Return a 5xx the edge will not cache; with stale-if-error on the good
