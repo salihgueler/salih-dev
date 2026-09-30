@@ -195,3 +195,20 @@ test("the rollout render cache policy caches nothing (all TTLs at or near zero)"
     }),
   });
 });
+
+test("CloudFront may call the render Function URL and invoke the function", () => {
+  // OAC on a Function URL needs both actions; with only InvokeFunctionUrl every
+  // render route returned 403 in production.
+  const t = deliveryTemplate();
+  const permissions = Object.values(t.findResources("AWS::Lambda::Permission")).map(
+    (resource) => resource.Properties as { Action: string; Principal: string },
+  );
+  for (const action of ["lambda:InvokeFunctionUrl", "lambda:InvokeFunction"]) {
+    assert.ok(
+      permissions.some(
+        (p) => p.Action === action && p.Principal === "cloudfront.amazonaws.com",
+      ),
+      `CloudFront has ${action}`,
+    );
+  }
+});

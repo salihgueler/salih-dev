@@ -655,6 +655,18 @@ export class SalihDevDeliveryStack extends Stack {
       priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
     });
 
+    // A Function URL behind OAC needs BOTH lambda:InvokeFunctionUrl and
+    // lambda:InvokeFunction for the CloudFront service principal (see the
+    // CloudFront guide, "Restrict access to an AWS Lambda function URL
+    // origin"). FunctionUrlOrigin.withOriginAccessControl in this CDK version
+    // grants only InvokeFunctionUrl, and the first production deploy returned
+    // 403 (served as the 404 page) on every render route until this was added.
+    renderFunction.addPermission("AllowCloudFrontInvokeFunction", {
+      action: "lambda:InvokeFunction",
+      principal: new iam.ServicePrincipal("cloudfront.amazonaws.com"),
+      sourceArn: `arn:${this.partition}:cloudfront::${this.account}:distribution/${distribution.distributionId}`,
+    });
+
     const analytics = new Analytics(this, { distribution });
 
     for (const recordName of [props.domainName, `www.${props.domainName}`]) {
