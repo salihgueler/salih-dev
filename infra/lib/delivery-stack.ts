@@ -943,6 +943,28 @@ export class SalihDevDeliveryStack extends Stack {
     });
     buildAlarm.addAlarmAction(new actions.SnsAction(alarmTopic));
 
+    // The publisher still bakes the static site on code pushes and, while
+    // RENDER_ROLLOUT_ACTIVE is on, on every content write and daily import.
+    // Visitors on the flag-off path (and every on-path fallback) read those
+    // baked pages, so a failed publish would leave them silently stale.
+    const publisherAlarm = new cloudwatch.Alarm(
+      this,
+      "PublisherBuildFailureAlarm",
+      {
+        alarmDescription:
+          "A salih.dev publisher build failed (the baked static site in the site bucket was not updated).",
+        comparisonOperator:
+          cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+        evaluationPeriods: 1,
+        metric: project.metricFailedBuilds({
+          period: Duration.hours(1),
+        }),
+        threshold: 1,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      },
+    );
+    publisherAlarm.addAlarmAction(new actions.SnsAction(alarmTopic));
+
     // --- Operational monitoring: CloudFront errors and scheduled homepage check ---
     new Monitoring(this, {
       alarmTopic,

@@ -999,10 +999,27 @@ test("adds privacy-first analytics and low-cost monitoring", () => {
   delivery.resourceCountIs("AWS::CloudWatch::Dashboard", 1);
   delivery.resourceCountIs("AWS::Synthetics::Canary", 0);
 
-  // Build failure alarm plus CloudFront 4xx/5xx and two homepage-check alarms
-  // (5), plus the three render-rollout alarms (render errors, p95 latency and
-  // handled render failures) that AppConfig watches as monitors (8 total).
-  delivery.resourceCountIs("AWS::CloudWatch::Alarm", 8);
+  // Importer and publisher build-failure alarms plus CloudFront 4xx/5xx and two
+  // homepage-check alarms (6), plus the three render-rollout alarms (render
+  // errors, p95 latency and handled render failures) that AppConfig watches as
+  // monitors (9 total).
+  delivery.resourceCountIs("AWS::CloudWatch::Alarm", 9);
+
+  // A failed publisher build must alarm: during the rollout it is what keeps
+  // the baked pages behind the flag-off path and the on-path fallback current.
+  const publisherId = Object.keys(delivery.findResources("AWS::CodeBuild::Project")).find(
+    (id) => id.startsWith("Publisher"),
+  );
+  assert.ok(publisherId, "publisher CodeBuild project exists");
+  delivery.hasResourceProperties("AWS::CloudWatch::Alarm", {
+    AlarmActions: Match.anyValue(),
+    ComparisonOperator: "GreaterThanOrEqualToThreshold",
+    Dimensions: [{ Name: "ProjectName", Value: { Ref: publisherId } }],
+    MetricName: "FailedBuilds",
+    Namespace: "AWS/CodeBuild",
+    Period: 3600,
+    Threshold: 1,
+  });
 
   // Selected log fields must exclude visitor identifiers.
   const deliveries = delivery.findResources("AWS::Logs::Delivery");
