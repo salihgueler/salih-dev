@@ -552,9 +552,11 @@ CodeBuild, or change DNS or nameservers.
 Request-time rendering ships behind an AppConfig feature flag. The CDK stack
 creates the AppConfig application `salih-dev`, the environment `production`, the
 feature-flag profile `render-flags` and the deployment strategy
-`salih-dev-render-rollout`, and deploys the flag as off. With the flag off, the
-render Lambda serves the page the publisher baked into the site bucket, so a
-deploy changes nothing a visitor can see.
+`salih-dev-render-rollout`, and creates a first flag version with the flag off.
+It does not deploy that version; you deploy it once after the stack, as shown
+below. With the flag off, or not yet deployed, the render Lambda serves the page
+the publisher baked into the site bucket, so a deploy changes nothing a visitor
+can see.
 
 The render Lambda reads the flag from the AppConfig Agent extension on
 `localhost:2772`, sending the visitor's `vid` cookie as `Context: vid=<id>`. A
