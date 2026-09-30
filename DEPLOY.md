@@ -564,8 +564,17 @@ or `x-render-path: static` (baked page).
 
 Turning the flag on, targeting it and raising the percentage are flag
 deployments, not CDK deploys. The CDK stack only holds the default-off flag
-content. Do not change that content in CDK during the rollout: a changed inline
-flag deploys over whatever you set by hand.
+content and does not deploy it. Do not change that content in CDK during the
+rollout: it is only a starting version, and deploying it would switch everyone
+off.
+
+The stack deliberately creates no AppConfig deployment. AppConfig rolls a
+deployment back when any monitor alarm is in `ALARM` or `INSUFFICIENT_DATA`,
+and new CloudWatch alarms start in `INSUFFICIENT_DATA` until their first
+evaluation. A deployment created in the same stack deploy started three seconds
+after the alarms and rolled the whole stack back. Until the first flag
+deployment below, the AppConfig Agent answers the flag read with an error and
+the render Lambda serves the baked pages, which is the flag-off behavior.
 
 ### Check the deploy
 
@@ -595,6 +604,29 @@ PROFILE_ID=$(aws appconfig list-configuration-profiles --profile personal \
 STRATEGY_ID=$(aws appconfig list-deployment-strategies --profile personal \
   --query "Items[?Name=='salih-dev-render-rollout'].Id" --output text)
 ```
+
+### Deploy the default-off flag once
+
+Wait until the three render alarms leave `INSUFFICIENT_DATA` (about a minute
+after the stack deploy), then deploy the version the stack created, which has
+the flag off for everyone:
+
+```sh
+aws cloudwatch describe-alarms --profile personal \
+  --alarm-name-prefix SalihDevDelivery-FeatureFlags \
+  --query 'MetricAlarms[].[AlarmName,StateValue]' --output text
+OFF_VERSION=$(aws appconfig list-hosted-configuration-versions --profile personal \
+  --application-id "$APP_ID" --configuration-profile-id "$PROFILE_ID" \
+  --query 'Items[0].VersionNumber' --output text)
+aws appconfig start-deployment --profile personal \
+  --application-id "$APP_ID" --environment-id "$ENV_ID" \
+  --configuration-profile-id "$PROFILE_ID" --configuration-version "$OFF_VERSION" \
+  --deployment-strategy-id AppConfig.AllAtOnce
+```
+
+Every alarm must print `OK` before you start it. `AppConfig.AllAtOnce` reaches
+every target at once and then bakes for 10 minutes. Routes keep reporting
+`x-render-path: static` before, during and after it.
 
 ### Turn the flag on for one visitor
 

@@ -181,9 +181,15 @@ export class FeatureFlags extends Construct {
       },
     );
 
-    // The feature-flag configuration: one boolean flag, deployed with its
-    // default `false`. Turning it on, and adding the targeting or split rule,
-    // happens out of band as a flag deployment.
+    // The feature-flag configuration: one boolean flag with its default
+    // `false`. The stack creates the version but does NOT deploy it. AppConfig
+    // rolls a deployment back when a monitor alarm is in ALARM or
+    // INSUFFICIENT_DATA, and the three alarms above start in INSUFFICIENT_DATA
+    // until CloudWatch first evaluates them, so a deployment started in the
+    // same stack deploy races them and rolls the whole stack back. The first
+    // flag deployment is a runbook step (DEPLOY.md section 11) once the alarms
+    // are OK. Until then the flag read fails and the render Lambda serves the
+    // baked pages, which is the flag-off behavior.
     this.configuration = new appconfig.HostedConfiguration(
       this,
       "FeatureFlags",
@@ -191,7 +197,8 @@ export class FeatureFlags extends Construct {
         application: this.application,
         name: APPCONFIG_PROFILE_NAME,
         description: "salih.dev render rollout feature flags.",
-        deployTo: [this.environment],
+        // Passed so CDK does not create a second, default strategy. Without
+        // `deployTo` nothing is deployed with it here.
         deploymentStrategy: this.deploymentStrategy,
         type: appconfig.ConfigurationType.FEATURE_FLAGS,
         content: appconfig.ConfigurationContent.fromInlineJson(

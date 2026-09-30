@@ -118,6 +118,15 @@ test("the deployment strategy has a final bake time", () => {
   });
 });
 
+test("the stack creates the flag version but does not deploy it", () => {
+  // The monitor alarms start in INSUFFICIENT_DATA, which AppConfig treats as a
+  // rollback signal, so a deployment in the same stack deploy rolls it back.
+  const t = deliveryTemplate();
+  t.resourceCountIs("AWS::AppConfig::HostedConfigurationVersion", 1);
+  t.resourceCountIs("AWS::AppConfig::Deployment", 0);
+  t.resourceCountIs("AWS::AppConfig::DeploymentStrategy", 1);
+});
+
 test("the render Lambda carries the AppConfig extension layer and coordinates", () => {
   const t = deliveryTemplate();
   const functions = t.findResources("AWS::Lambda::Function");
