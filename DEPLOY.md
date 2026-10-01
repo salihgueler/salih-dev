@@ -594,9 +594,12 @@ Copy your own `vid` from the browser's cookie storage for the next step.
 
 ### Look up the AppConfig ids
 
-The CLI takes ids, not names:
+The CLI takes ids, not names. Both stacks live in `us-east-1`, so pin the
+region first: a profile with another default region finds no AppConfig
+application and no alarms, and every command below fails with an empty id.
 
 ```sh
+export AWS_REGION=us-east-1
 APP_ID=$(aws appconfig list-applications --profile personal \
   --query "Items[?Name=='salih-dev'].Id" --output text)
 ENV_ID=$(aws appconfig list-environments --profile personal \
