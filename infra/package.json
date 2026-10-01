@@ -11,6 +11,7 @@
     "deploy:delivery": "cdk deploy SalihDevDelivery --strict"
   },
   "dependencies": {
+    "@aws-sdk/client-cloudfront": "3.1127.0",
     "@aws-sdk/client-codebuild": "3.1127.0",
     "@aws-sdk/client-s3": "3.1127.0",
     "@aws-sdk/s3-presigned-post": "3.1127.0",

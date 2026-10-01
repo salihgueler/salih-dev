@@ -6,7 +6,9 @@ import {
   getPublishedPosts,
   slugify,
 } from "../../lib/content";
+import { PRERENDER_DYNAMIC_ROUTE } from "../../lib/dynamic-route";
 
+export const prerender = PRERENDER_DYNAMIC_ROUTE;
 export const getStaticPaths = getCategoryStaticPaths;
 
 const category = Astro.params.category ?? "";

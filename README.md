@@ -1,8 +1,17 @@
 # salih.dev
 
 A text-first personal website and blog for Salih Güler, built with Astro and
-TypeScript. The static site serves human-friendly pages and machine-readable
-representations of the same public content.
+TypeScript. The site serves human-friendly pages and machine-readable
+representations of the same public content. Pages whose content lives in the
+retained content bucket (home, Talks, the blog and the machine-readable
+listings) render on request in a Lambda from that content, so content changes
+go live within seconds with no site build. About, Contact and the remaining
+pages are static.
+
+Request-time rendering ships behind the AppConfig feature flag
+`renderFromBackend`. While the flag is off for a visitor, the Lambda serves the
+page the static build baked into S3 instead. `DEPLOY.md` section 11 has the
+rollout, rollback and flag-removal steps.
 
 ## Requirements
 
@@ -47,15 +56,21 @@ npm run synth
 ## Content
 
 Blog posts live in `src/content/blog/` and are validated by
-`src/content.config.ts`. Set `draft: true` to exclude a post from the website,
-RSS feed, and machine-readable indexes. Permanent identity, biography, social
-links, and map presentation live in `src/config/site.ts`.
+`src/content.config.ts`. The live site reads them from `posts/` in the content
+bucket at request time, with the same schema (`src/lib/blog/schema.ts`) and
+Markdown configuration (`src/lib/markdown-config.ts`) as the static build. Set
+`draft: true` to exclude a post from the website, RSS feed, and machine-readable
+indexes. Permanent identity, biography, social links, and map presentation live
+in `src/config/site.ts`.
 
 Talks have two authoring sources that converge before validation. Repository-authored
 Markdown records live under `src/content/talks/` with PDFs under
 `public/talks/slides/`; they are changed only through Git. API-authored records
 and approved decks live under `talks/records/` and `talks/decks/` in the retained
-content bucket. The publisher synchronizes those objects to separate local
+content bucket. The live Talks routes read API-authored records from the bucket
+at request time and link slides straight to `talks/decks/` through CloudFront.
+Repository-authored records currently reach only the static build. The
+publisher synchronizes the bucket objects to separate local
 caches and runs `npm run materialize:talks`, which clears and recreates only the
 gitignored `src/content/talks/api/` and `public/talks/slides/api/` namespaces.
 Records without an approved deck and unreferenced decks are excluded, while
@@ -91,7 +106,11 @@ canonical identities or slide paths. All Git/API records resolve through one
 validated snapshot for `/talks/`, `/talks/index.md`, `/sitemap.xml`, `/llms.txt`,
 and `/llms-full.txt`. If sources conflict, repository content is authoritative
 and the API record must be removed or replaced. A failed build leaves stored API
-state unchanged and preserves the previously published site. The collection is
+state unchanged and preserves the previously published static pages. At request
+time, an API record that fails validation makes the Talks routes fall back to
+the baked page during the flag rollout (and trips the `RenderFailures` alarm),
+and return an uncached 502 once the flag is removed, while CloudFront keeps
+serving the last good page. The collection is
 intentionally empty until the Author supplies a talk through one of these two
 workflows.
 
@@ -111,17 +130,24 @@ build`, `npm test`, and `npm run synth` from `infra/`.
 
 Current location and conference events use the versioned schema in
 `src/config/site-content-schema.ts`. Local builds use
-`src/config/site-content.default.json`; production builds load
-`site/content.v1.json` from the retained content bucket. The IAM-authenticated
-content API updates that object and starts the existing publisher, so content
-changes do not require a CDK deployment. The API uses an exact root-ARN allowlist
+`src/config/site-content.default.json`; the live site reads
+`site/content.v1.json` from the retained content bucket on each request. The
+IAM-authenticated content API updates that object and invalidates every dynamic
+route, so content changes need no build and no CDK deployment. During the flag
+rollout the write also starts the publisher, so the baked pages stay current.
+If the object is missing, a flag-on request falls back to the baked page and
+trips the `RenderFailures` alarm; once the flag is removed, every dynamic route
+returns an uncached 502 rather than falling back to
+the default file. The API uses an exact root-ARN allowlist
 for this personal account and has no public or alternate editor identity.
 
 The DEV importer uses reviewed category and summary metadata, writes normalized
 Markdown, and downloads deterministic banner files under
 `public/images/blog/`. That generated directory and `.cache/` manifest are
-ignored by Git; the publication pipeline persists them in the retained content
-bucket. DEV-origin frontmatter must reference
+ignored by Git. A daily `DevImporter` CodeBuild project runs the import, writes
+posts to `posts/` and banners to `images/` in the retained content bucket, and
+invalidates the blog routes without building the site. Banners are served from
+that bucket at `/images/blog/*`. DEV-origin frontmatter must reference
 `https://salih.dev/images/blog/...`, never the upstream image proxy.
 
 ## Machine-readable access
@@ -145,8 +171,13 @@ The CDK application in `infra/` defines two stacks:
 
 - `SalihDevState`: retained, versioned content storage and the Route 53 zone.
 - `SalihDevDelivery`: private website storage, CloudFront, ACM, Route 53 aliases,
-  CodeBuild publication, an IAM-authenticated content API, daily DEV
-  synchronization, alarms, and analytics.
+  a read-only render Lambda (a second CloudFront origin behind a Function URL
+  with Origin Access Control) with the AppConfig Agent extension, the
+  `renderFromBackend` AppConfig application and its three rollback alarms,
+  deck and image origins on the content bucket,
+  on-demand CodeBuild publication for code and design changes, an
+  IAM-authenticated content API, the daily `DevImporter`, alarms, and
+  analytics.
 
 Analytics use privacy-filtered CloudFront standard logs v2 in a retained
 90-day S3 bucket, an external Glue table over the default CloudFront prefix, an

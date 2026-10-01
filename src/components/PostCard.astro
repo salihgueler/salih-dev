@@ -1,10 +1,8 @@
 ---
-import type { CollectionEntry } from "astro:content";
-
-import { formatDate, postUrl, slugify } from "../lib/content";
+import { formatDate, postUrl, slugify, type PublishedPost } from "../lib/content";
 
 interface Props {
-  post: CollectionEntry<"blog">;
+  post: PublishedPost;
 }
 
 const { post } = Astro.props;

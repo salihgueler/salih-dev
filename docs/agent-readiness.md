@@ -66,8 +66,11 @@ repository content through the API. Metadata, PDF, and static verification use
 the same strict rules for both sources.
 
 A talk record that fails build validation fails site generation, leaves the
-stored API state unchanged, and leaves the previously published site live. Only
-a successful test, check, build, and verification gate publishes the snapshot.
+stored API state unchanged, and leaves the previously published static pages
+live. The live Talks routes are rendered on request from the API records in the
+content bucket with the same validators; a record that fails there falls back
+to the baked page during the `renderFromBackend` rollout, and afterwards returns
+an uncached 502 while CloudFront keeps serving the last good page.
 The source mechanism does not change the public contract: HTML and Markdown,
 sitemap, LLM indexes, and slide URLs still agree or publish nothing. While the
 collection is empty, both representations publish the approved empty archive.

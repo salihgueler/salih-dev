@@ -2,7 +2,10 @@ import type { APIRoute } from "astro";
 
 import { site } from "../config/site";
 import { getPublishedPosts, postUrl, slugify } from "../lib/content";
-import { getPublishedTalksSnapshot } from "../lib/talks/gateway";
+import { PRERENDER_DYNAMIC_ROUTE } from "../lib/dynamic-route";
+import { getPublishedTalksSnapshot } from "../lib/talks/gateway-astro";
+
+export const prerender = PRERENDER_DYNAMIC_ROUTE;
 
 /**
  * One sitemap URL. `lastmod` accepts a `Date` for blog records and an already

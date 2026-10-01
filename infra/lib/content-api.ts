@@ -4,6 +4,7 @@ import { AccessLogFormat } from "aws-cdk-lib/aws-apigateway";
 import * as apigwv2 from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpIamAuthorizer } from "aws-cdk-lib/aws-apigatewayv2-authorizers";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
+import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as codebuild from "aws-cdk-lib/aws-codebuild";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
@@ -22,7 +23,20 @@ const API_TALK_RECORDS = "talks/records/*";
 export interface ContentApiProps {
   allowedCallerArns: string[];
   contentBucket: s3.IBucket;
-  publisher: codebuild.IProject;
+  distribution: cloudfront.IDistribution;
+  /**
+   * The static publisher CodeBuild project. During the rollout, the write paths
+   * ALSO start this build so the baked pages the off path serves stay current
+   * (render-rollout-flag, Part 2 dual writes).
+   */
+  publisherProject: codebuild.IProject;
+  /**
+   * Whether the render rollout is active. When true, the write functions carry
+   * `RENDER_ROLLOUT_ACTIVE=1` and `PUBLISHER_PROJECT_NAME`, and are granted
+   * `codebuild:StartBuild` on the publisher project. When false (flag removed),
+   * the dual write is a no-op and the grant is not added.
+   */
+  rolloutActive: boolean;
 }
 
 export class ContentApi extends Construct {
@@ -31,13 +45,25 @@ export class ContentApi extends Construct {
 
     const projectRoot = path.resolve(__dirname, "../..");
     const lockFile = path.resolve(__dirname, "../package-lock.json");
+    const distributionArn = `arn:${Stack.of(this).partition}:cloudfront::${Stack.of(this).account}:distribution/${props.distribution.distributionId}`;
     const commonEnvironment = {
       CONTENT_ALLOWED_CALLER_ARNS: props.allowedCallerArns.join(","),
       CONTENT_BUCKET_NAME: props.contentBucket.bucketName,
     };
-    const publisherEnvironment = {
+    // Write paths refresh the edge with a scoped CloudFront invalidation
+    // instead of starting the publisher, so a content change is live in
+    // seconds without a full rebuild.
+    const invalidatingEnvironment = {
       ...commonEnvironment,
-      PUBLISHER_PROJECT_NAME: props.publisher.projectName,
+      DISTRIBUTION_ID: props.distribution.distributionId,
+      // During the rollout, the write paths also start the publisher build so
+      // the baked pages the off path serves stay current (dual writes).
+      ...(props.rolloutActive
+        ? {
+            RENDER_ROLLOUT_ACTIVE: "1",
+            PUBLISHER_PROJECT_NAME: props.publisherProject.projectName,
+          }
+        : {}),
     };
 
     const readLogs = new logs.LogGroup(this, "ReadLogs", {
@@ -66,7 +92,7 @@ export class ContentApi extends Construct {
       bundling: { minify: true, target: "node24" },
       depsLockFilePath: lockFile,
       entry: path.resolve(__dirname, "../functions/content-write.ts"),
-      environment: publisherEnvironment,
+      environment: invalidatingEnvironment,
       logGroup: writeLogs,
       memorySize: 256,
       projectRoot,
@@ -124,7 +150,7 @@ export class ContentApi extends Construct {
         },
         depsLockFilePath: lockFile,
         entry: path.resolve(__dirname, "../functions/talk-upload-complete.ts"),
-        environment: publisherEnvironment,
+        environment: invalidatingEnvironment,
         logGroup: talkUploadCompleteLogs,
         memorySize: 1769,
         projectRoot,
@@ -145,7 +171,7 @@ export class ContentApi extends Construct {
         bundling: { minify: true, target: "node24" },
         depsLockFilePath: lockFile,
         entry: path.resolve(__dirname, "../functions/talk-records.ts"),
-        environment: publisherEnvironment,
+        environment: invalidatingEnvironment,
         logGroup: talkRecordsLogs,
         memorySize: 256,
         projectRoot,
@@ -182,8 +208,8 @@ export class ContentApi extends Construct {
     );
     writeFunction.addToRolePolicy(
       new iam.PolicyStatement({
-        actions: ["codebuild:StartBuild"],
-        resources: [props.publisher.projectArn],
+        actions: ["cloudfront:CreateInvalidation"],
+        resources: [distributionArn],
       }),
     );
 
@@ -244,8 +270,8 @@ export class ContentApi extends Construct {
     );
     talkUploadCompleteFunction.addToRolePolicy(
       new iam.PolicyStatement({
-        actions: ["codebuild:StartBuild"],
-        resources: [props.publisher.projectArn],
+        actions: ["cloudfront:CreateInvalidation"],
+        resources: [distributionArn],
       }),
     );
 
@@ -272,10 +298,29 @@ export class ContentApi extends Construct {
     );
     talkRecordsFunction.addToRolePolicy(
       new iam.PolicyStatement({
-        actions: ["codebuild:StartBuild"],
-        resources: [props.publisher.projectArn],
+        actions: ["cloudfront:CreateInvalidation"],
+        resources: [distributionArn],
       }),
     );
+
+    // During the rollout, the three write functions also start the publisher
+    // build (dual writes), so they need codebuild:StartBuild on that one
+    // project. When the flag is removed (rolloutActive=false) this grant is not
+    // added, restoring PR #10's invalidation-only write role.
+    if (props.rolloutActive) {
+      for (const fn of [
+        writeFunction,
+        talkUploadCompleteFunction,
+        talkRecordsFunction,
+      ]) {
+        fn.addToRolePolicy(
+          new iam.PolicyStatement({
+            actions: ["codebuild:StartBuild"],
+            resources: [props.publisherProject.projectArn],
+          }),
+        );
+      }
+    }
 
     const authorizer = new HttpIamAuthorizer();
     const api = new apigwv2.HttpApi(this, "Api", {

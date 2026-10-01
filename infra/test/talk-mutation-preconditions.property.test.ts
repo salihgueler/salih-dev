@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { CodeBuildClient, StartBuildCommand } from "@aws-sdk/client-codebuild";
+import {
+  CloudFrontClient,
+  CreateInvalidationCommand,
+} from "@aws-sdk/client-cloudfront";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -46,7 +49,7 @@ const invokeUploadStart = uploadStartHandler as AsyncHandler;
 
 let activeScenario: Scenario | null = null;
 let mutatingStoreCalls: string[] = [];
-let buildStartCalls = 0;
+let invalidationCalls = 0;
 
 function scenario(): Scenario {
   const current = activeScenario;
@@ -237,7 +240,7 @@ test("Property 11: version preconditions decide replacement and removal mutation
   });
 
   const originalS3Send = S3Client.prototype.send;
-  const originalCodeBuildSend = CodeBuildClient.prototype.send;
+  const originalCloudFrontSend = CloudFrontClient.prototype.send;
   const originalConsoleLog = console.log;
   const environment = [
     "AWS_ACCESS_KEY_ID",
@@ -245,7 +248,7 @@ test("Property 11: version preconditions decide replacement and removal mutation
     "AWS_SECRET_ACCESS_KEY",
     "CONTENT_ALLOWED_CALLER_ARNS",
     "CONTENT_BUCKET_NAME",
-    "PUBLISHER_PROJECT_NAME",
+    "DISTRIBUTION_ID",
     "REPOSITORY_TALK_RECORD_KEYS",
   ] as const;
   const previousEnvironment = new Map(
@@ -258,7 +261,7 @@ test("Property 11: version preconditions decide replacement and removal mutation
     AWS_SECRET_ACCESS_KEY: "property-test-secret-key",
     CONTENT_ALLOWED_CALLER_ARNS: EDITOR_ARN,
     CONTENT_BUCKET_NAME: "property-test-content-bucket",
-    PUBLISHER_PROJECT_NAME: "property-test-publisher",
+    DISTRIBUTION_ID: "PROPERTYTESTDIST",
     REPOSITORY_TALK_RECORD_KEYS: "",
   });
   console.log = () => undefined;
@@ -285,15 +288,15 @@ test("Property 11: version preconditions decide replacement and removal mutation
     throw new Error(`Unexpected S3 command: ${String(command)}`);
   }) as S3Client["send"];
 
-  CodeBuildClient.prototype.send = (async (command: unknown) => {
-    assert.ok(command instanceof StartBuildCommand);
-    buildStartCalls += 1;
-    return { build: { id: "property-test-build" } };
-  }) as CodeBuildClient["send"];
+  CloudFrontClient.prototype.send = (async (command: unknown) => {
+    assert.ok(command instanceof CreateInvalidationCommand);
+    invalidationCalls += 1;
+    return { Invalidation: { Id: "property-test-invalidation" } };
+  }) as CloudFrontClient["send"];
 
   context.after(() => {
     S3Client.prototype.send = originalS3Send;
-    CodeBuildClient.prototype.send = originalCodeBuildSend;
+    CloudFrontClient.prototype.send = originalCloudFrontSend;
     console.log = originalConsoleLog;
     for (const name of environment) {
       const previous = previousEnvironment.get(name);
@@ -310,7 +313,7 @@ test("Property 11: version preconditions decide replacement and removal mutation
         versionMatches: generated.versionMatches,
       };
       mutatingStoreCalls = [];
-      buildStartCalls = 0;
+      invalidationCalls = 0;
 
       const response = await invokeUploadStart(
         event(
@@ -332,7 +335,7 @@ test("Property 11: version preconditions decide replacement and removal mutation
       } else {
         assert.deepEqual(mutatingStoreCalls, []);
       }
-      assert.equal(buildStartCalls, 0);
+      assert.equal(invalidationCalls, 0);
     }),
     { numRuns: 128 },
   );
@@ -345,7 +348,7 @@ test("Property 11: version preconditions decide replacement and removal mutation
         versionMatches: generated.versionMatches,
       };
       mutatingStoreCalls = [];
-      buildStartCalls = 0;
+      invalidationCalls = 0;
 
       const response = await invokeRecords(
         event(
@@ -369,10 +372,10 @@ test("Property 11: version preconditions decide replacement and removal mutation
       assert.equal(responseError(response), expected.error);
       if (expected.error === undefined) {
         assert.deepEqual(mutatingStoreCalls, ["DeleteObject", "DeleteObject"]);
-        assert.equal(buildStartCalls, 1);
+        assert.equal(invalidationCalls, 1);
       } else {
         assert.deepEqual(mutatingStoreCalls, []);
-        assert.equal(buildStartCalls, 0);
+        assert.equal(invalidationCalls, 0);
       }
     }),
     { numRuns: 128 },

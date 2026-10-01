@@ -186,18 +186,56 @@ aws cloudwatch describe-alarms \
   --region us-east-1
 ```
 
-Manually rerun synchronization:
+Manually rerun the DEV import (it writes `posts/` and `images/` to the content
+bucket and invalidates the blog routes, with no site build). The project has a
+generated name, so look it up first:
 
 ```sh
-aws codebuild start-build --project-name <publisher-project-name>
+aws codebuild list-projects --query "projects[?contains(@, 'DevImporter')]"
+aws codebuild start-build --project-name <dev-importer-project-name>
 ```
 
-Inspect the scheduler DLQ and CodeBuild logs when a publication alarm fires.
+Rerun the publisher with `PublisherProjectName` only for a code or design
+change. Inspect the scheduler DLQ and `/aws/codebuild/salih-dev-dev-importer`
+when the import alarm fires, and `/aws/codebuild/salih-dev-publisher` for a
+failed publish.
 Rollback site content by restoring a previous S3 object version or publishing
 a previously verified source revision. Route 53 and retained buckets remain
 protected; deleting a CDK stack does not delete retained content.
 
 ## 9. Manage location and events through the content API
+
+> **Backend-served content.** The home page, the Talks archive, the blog index,
+> posts, categories, tags, and the machine-readable listings (`rss.xml`,
+> `sitemap.xml`, `llms.txt`, `llms-full.txt`), each with its Markdown alternate,
+> are served at request time by a read-only render Lambda that is a second
+> CloudFront origin (its Function URL is IAM-authed and fronted by Origin Access
+> Control, so it is never public). It reads `site/content.v1.json`,
+> `talks/records/`, and `posts/` from the content bucket and reuses the same
+> pages and serializers the static build uses, so its output matches the baked
+> pages. Slide PDFs (`/talks/slides/api/*`) and blog images (`/images/blog/*`)
+> are served straight from the content bucket through CloudFront; the render
+> Lambda never downloads a PDF.
+>
+> The three content write paths (`PUT /v1/content`, talk-upload completion, and
+> talk removal) store their object and issue a scoped CloudFront invalidation,
+> so the change is live within seconds. The daily `DevImporter` CodeBuild
+> project imports dev.to posts into `posts/` and `images/` and invalidates the
+> blog routes, also without a site build. The publisher is now only for code and
+> design changes; start it manually.
+>
+> While the `renderFromBackend` rollout is in place (section 11), the render
+> Lambda serves the baked page from the site bucket to every visitor the flag
+> is off for, and the write paths and the `DevImporter` also start the
+> publisher so those baked pages stay current. Write responses then include a
+> `buildId` next to the `invalidationId`.
+>
+> `site/content.v1.json` must exist before this is deployed. If it is missing,
+> a flag-on request falls back to the baked page and logs `on_path_fallback`,
+> which trips the `RenderFailures` alarm. Once the flag is removed, every
+> dynamic route returns an uncached 502 instead of falling back to repo
+> content.
+
 
 The content API accepts SigV4 requests only from:
 
@@ -279,10 +317,13 @@ curl --fail-with-body \
   "$SITE_CONTENT_API/v1/content"
 ```
 
-A successful PUT returns HTTP 202 with the new S3 version and CodeBuild build
-ID. Invalid content returns HTTP 400 before storage; unsigned callers, other IAM
-identities, and mismatched caller ARNs receive HTTP 403. Restore an earlier S3
-version of `site/content.v1.json` and publish again to roll back.
+A successful PUT returns HTTP 202 with the new S3 version and a CloudFront
+invalidation ID (`status: published`). The location and events are served at
+request time by the render origin, so the change is live within seconds without
+a publisher build. Invalid content returns HTTP 400 before storage; unsigned
+callers, other IAM identities, and mismatched caller ARNs receive HTTP 403.
+Restore an earlier S3 version of `site/content.v1.json`; the next request
+reflects it after the write's invalidation.
 
 ## 10. Manage API-authored talks
 
@@ -293,7 +334,7 @@ root-ARN allowlist used by `/v1/content`:
 | Method and route                             | Purpose                                                                             |
 | -------------------------------------------- | ----------------------------------------------------------------------------------- |
 | `POST /v1/talks/uploads`                     | Validate an optional talk record, stage the request, and issue one PDF upload grant |
-| `POST /v1/talks/uploads/{deckId}/completion` | Validate the transferred PDF, store approved state, and start publication           |
+| `POST /v1/talks/uploads/{deckId}/completion` | Validate the transferred PDF, store approved state, and invalidate the Talks routes  |
 | `GET /v1/talks/records`                      | List API-authored records and their current ETag versions; never return deck bytes  |
 | `DELETE /v1/talks/records/{recordKey}`       | Conditionally remove one API-authored record and its approved deck                  |
 
@@ -389,10 +430,12 @@ Completion re-reads the pending object and requires its recorded media type and
 size to match, the `%PDF-` signature to be present, every page to parse with the
 strict pinned parser without a password, and the page count to be positive.
 Only then does it copy the approved deck, conditionally store the API record,
-remove pending state, and start exactly one publisher build. A successful `202`
-returns `status: publishing`, validated byte/page counts, `buildId`, and, for a
-metadata upload, `recordKey`, `recordVersion`, and the same ETag in the response
-header.
+remove pending state, and issue exactly one scoped CloudFront invalidation of
+the Talks routes. A successful `202` returns `status: published`, validated
+byte/page counts, `invalidationId`, and, for a metadata upload, `recordKey`,
+`recordVersion`, and the same ETag in the response header. The Talks archive is
+served at request time by the render origin, so the change is live within
+seconds without a publisher build.
 
 Treat errors according to state:
 
@@ -410,14 +453,19 @@ precondition_required`: refresh the record list and restart with the current
   conditional record write prevents replacing a newer version. If the record is
   present or retry returns `pending_deck_not_found`, do not start another upload
   blindly—publication or cleanup may be the only remaining operation.
-- `503 publication_not_started`: the response identifies state that was already
-  stored. Do not repeat completion. Start the publisher manually with the
-  returned/stored identifiers, or allow the next scheduled publication to use
-  that state.
+- `503 invalidation_not_started`: the response identifies state that was already
+  stored. Do not repeat completion. Clear the Talks routes by hand with
+  `aws cloudfront create-invalidation --distribution-id <DistributionId> --paths
+"/talks/" "/talks/index.md" "/sitemap.xml" "/llms.txt" "/llms-full.txt"`, or
+  wait up to five minutes for the cached pages to expire.
 
-A publisher validation failure leaves the stored API record unchanged and the
-previously published site live. Fix it through a conditional replacement or
-removal, then publish again; do not bypass or weaken validation.
+The render origin validates every API record on each request with the same
+validators the build uses. During the flag rollout, a stored record that fails
+validation makes a flag-on Talks request fall back to the baked page and trips
+the `RenderFailures` alarm (section 11). Once the flag is removed, it makes the
+Talks routes return an uncached 502 while CloudFront keeps serving the last good
+page for up to 24 hours. Fix it through a conditional replacement or removal;
+do not bypass or weaken validation.
 
 ### Replace or remove a record
 
@@ -457,7 +505,8 @@ curl --fail-with-body \
 ```
 
 Removal deletes the current API record and its associated approved deck, then
-starts exactly one build; an already-absent deck is tolerated. Missing intent or
+issues one scoped CloudFront invalidation of the Talks routes; an already-absent
+deck is tolerated. Missing intent or
 precondition returns `428`, a malformed value returns `400`, a stale ETag
 returns `412`, and a missing record returns `404`. Repository-authored talks
 cannot be removed through this API and return `409 repository_authored_talk`.
@@ -471,22 +520,25 @@ API.
 Approved API records and decks live under `talks/records/` and `talks/decks/` in
 the existing private, TLS-only, SSE-S3 encrypted, versioned, retained content
 bucket. Abandoned staged requests and deck bytes under `talks/pending/` expire
-after one day. The publisher synchronizes records and decks into separate local
-caches with deletion enabled, then `npm run materialize:talks` clears and
-recreates only `src/content/talks/api/` and `public/talks/slides/api/`. Records
+after one day. The render origin reads `talks/records/` and the key-only
+`talks/decks/` listing on each request and never downloads a deck; visitors get
+decks straight from `talks/decks/` at `/talks/slides/api/<deckId>.pdf`. Records
 without an available approved deck and unreferenced decks do not enter the
-snapshot. The caches and retained store are read-only to materialization, while
-Git-authored records and tracked slides remain unchanged.
-
-After materialization the publisher runs DEV import, tests, Astro/type checks,
-the static build, and strict build verification. Only a successful gate may sync
-`dist/` to the website bucket and invalidate CloudFront. The Talks HTML,
-Markdown alternate, sitemap, and LLM indexes continue to come from one validated
 snapshot.
+
+The static build still materializes talks for the baked pages. The publisher
+synchronizes records and decks into separate local caches with deletion
+enabled, then `npm run materialize:talks` clears and recreates only
+`src/content/talks/api/` and `public/talks/slides/api/`. The caches and retained
+store are read-only to materialization, while Git-authored records and tracked
+slides remain unchanged. The publisher then runs DEV import, tests, Astro/type
+checks, the static build, and strict build verification. Only a successful gate
+may sync `dist/` to the website bucket and invalidate CloudFront.
 
 Authorization, deck-validation, and store-change logs are retained for one
 month and contain only their action-specific request ID, caller authorization,
-derived storage key, byte/page facts, stored version, and build ID fields. They
+derived storage key, byte/page facts, stored version, and invalidation ID
+fields. They
 exclude request/PDF/rendered content, IP and forwarded IP, cookies, query
 strings, user agents, referrers, and browser or device identifiers.
 
@@ -494,3 +546,233 @@ Creating or updating this infrastructure is billable and requires separate
 explicit approval. Local implementation and validation must not deploy or diff
 CDK, invoke the production content API, transfer/delete S3 objects, start
 CodeBuild, or change DNS or nameservers.
+
+## 11. Roll out request-time rendering with the `renderFromBackend` flag
+
+Request-time rendering ships behind an AppConfig feature flag. The CDK stack
+creates the AppConfig application `salih-dev`, the environment `production`, the
+feature-flag profile `render-flags` and the deployment strategy
+`salih-dev-render-rollout`, and creates a first flag version with the flag off.
+It does not deploy that version; you deploy it once after the stack, as shown
+below. With the flag off, or not yet deployed, the render Lambda serves the page
+the publisher baked into the site bucket, so a deploy changes nothing a visitor
+can see.
+
+The render Lambda reads the flag from the AppConfig Agent extension on
+`localhost:2772`, sending the visitor's `vid` cookie as `Context: vid=<id>`. A
+read that fails, returns a non-200 status or takes longer than 300 ms counts as
+off. Every render response carries `x-render-path: lambda` (rendered on request)
+or `x-render-path: static` (baked page).
+
+Turning the flag on, targeting it and raising the percentage are flag
+deployments, not CDK deploys. The CDK stack only holds the default-off flag
+content and does not deploy it. Do not change that content in CDK during the
+rollout: it is only a starting version, and deploying it would switch everyone
+off.
+
+The stack deliberately creates no AppConfig deployment. AppConfig rolls a
+deployment back when any monitor alarm is in `ALARM` or `INSUFFICIENT_DATA`,
+and new CloudWatch alarms start in `INSUFFICIENT_DATA` until their first
+evaluation. A deployment created in the same stack deploy started three seconds
+after the alarms and rolled the whole stack back. Until the first flag
+deployment below, the AppConfig Agent answers the flag read with an error and
+the render Lambda serves the baked pages, which is the flag-off behavior.
+
+### Check the deploy
+
+After the CDK deploy, every dynamic route must report the baked page:
+
+```sh
+curl -sI https://salih.dev/ | grep -i -E 'x-render-path|set-cookie'
+curl -sI https://salih.dev/talks/ | grep -i x-render-path
+curl -sI https://salih.dev/blog/ | grep -i x-render-path
+```
+
+Each prints `x-render-path: static`. The first response without a cookie also
+sets `vid=<uuid>; Max-Age=31536000; Path=/; Secure; HttpOnly; SameSite=Lax`.
+Copy your own `vid` from the browser's cookie storage for the next step.
+
+### Look up the AppConfig ids
+
+The CLI takes ids, not names. Both stacks live in `us-east-1`, so pin the
+region first: a profile with another default region finds no AppConfig
+application and no alarms, and every command below fails with an empty id.
+
+```sh
+export AWS_REGION=us-east-1
+APP_ID=$(aws appconfig list-applications --profile personal \
+  --query "Items[?Name=='salih-dev'].Id" --output text)
+ENV_ID=$(aws appconfig list-environments --profile personal \
+  --application-id "$APP_ID" --query "Items[?Name=='production'].Id" --output text)
+PROFILE_ID=$(aws appconfig list-configuration-profiles --profile personal \
+  --application-id "$APP_ID" --query "Items[?Name=='render-flags'].Id" --output text)
+STRATEGY_ID=$(aws appconfig list-deployment-strategies --profile personal \
+  --query "Items[?Name=='salih-dev-render-rollout'].Id" --output text)
+```
+
+### Deploy the default-off flag once
+
+Wait until the three render alarms leave `INSUFFICIENT_DATA` (about a minute
+after the stack deploy), then deploy the version the stack created, which has
+the flag off for everyone:
+
+```sh
+aws cloudwatch describe-alarms --profile personal \
+  --alarm-name-prefix SalihDevDelivery-FeatureFlags \
+  --query 'MetricAlarms[].[AlarmName,StateValue]' --output text
+OFF_VERSION=$(aws appconfig list-hosted-configuration-versions --profile personal \
+  --application-id "$APP_ID" --configuration-profile-id "$PROFILE_ID" \
+  --query 'Items[0].VersionNumber' --output text)
+aws appconfig start-deployment --profile personal \
+  --application-id "$APP_ID" --environment-id "$ENV_ID" \
+  --configuration-profile-id "$PROFILE_ID" --configuration-version "$OFF_VERSION" \
+  --deployment-strategy-id AppConfig.AllAtOnce
+```
+
+Every alarm must print `OK` before you start it. `AppConfig.AllAtOnce` reaches
+every target at once and then bakes for 10 minutes. Routes keep reporting
+`x-render-path: static` before, during and after it.
+
+### Turn the flag on for one visitor
+
+Write the flag as a multi-variant flag. Variants are evaluated in order and the
+first rule that matches wins; the variant without a rule is the default. Save
+this as `.cache/render-flags.json` with your own `vid`:
+
+```json
+{
+  "version": "1",
+  "flags": {
+    "renderFromBackend": {
+      "name": "renderFromBackend",
+      "description": "Serve the dynamic routes from the render Lambda (on) or the baked static pages (off)."
+    }
+  },
+  "values": {
+    "renderFromBackend": {
+      "_variants": [
+        { "name": "author", "enabled": true, "rule": "(in $vid [\"<your-vid>\"])" },
+        { "name": "default", "enabled": false }
+      ]
+    }
+  }
+}
+```
+
+Create a version and deploy it:
+
+```sh
+VERSION=$(aws appconfig create-hosted-configuration-version --profile personal \
+  --application-id "$APP_ID" --configuration-profile-id "$PROFILE_ID" \
+  --content-type application/json --content file://.cache/render-flags.json \
+  --cli-binary-format raw-in-base64-out --query VersionNumber --output text \
+  .cache/render-flags-returned.json)
+aws appconfig start-deployment --profile personal \
+  --application-id "$APP_ID" --environment-id "$ENV_ID" \
+  --configuration-profile-id "$PROFILE_ID" --configuration-version "$VERSION" \
+  --deployment-strategy-id "$STRATEGY_ID"
+```
+
+The strategy is linear: 25% of targets at a time over 20 minutes, then a
+10-minute final bake. After the deployment completes, your browser gets
+`x-render-path: lambda` and a request with any other `vid` still gets `static`:
+
+```sh
+curl -sI -H 'Cookie: vid=<your-vid>' https://salih.dev/talks/ | grep -i x-render-path
+curl -sI -H 'Cookie: vid=00000000-0000-4000-8000-000000000000' https://salih.dev/talks/ | grep -i x-render-path
+```
+
+The render Lambda does not send an `Entity-Id` header, so AppConfig spreads a
+deployment across Lambda execution environments rather than across visitors.
+While a deployment is in progress, one visitor can get the old flag from one
+execution environment and the new flag from another. Once it completes, every
+environment agrees and the `split` hash keeps each visitor on one side.
+
+### Raise the percentage
+
+Add a `split` variant under the `author` variant and deploy it the same way,
+changing only `pct` for each step (10, then 50, then 100):
+
+```json
+{ "name": "rollout", "enabled": true, "rule": "(split by::$vid pct::10)" }
+```
+
+`split` hashes the `vid`, so a visitor who gets the new path keeps it as the
+percentage goes up. Wait for each deployment to complete, and watch the three
+alarms and the `x-render-path` mix, before the next step.
+
+### Rollback
+
+Three CloudWatch alarms are AppConfig monitors on the `production` environment:
+
+| Alarm | Fires on |
+| --- | --- |
+| Render errors | at least one Lambda `Errors` in a minute |
+| Render latency | p95 duration of 5 seconds or more for three minutes |
+| Render failures | at least one handled render failure in a minute |
+
+The last one comes from a metric filter on the render log group that counts the
+`on_path_fallback`, `render_error`, `middleware_error` and `load_error`
+outcomes. A flag-on request whose content read, validation or render fails with
+a 5xx is served the baked page and logs `on_path_fallback`, so the visitor gets
+a 200 and the Lambda `Errors` metric never sees it.
+
+If an alarm fires during a deployment or its final bake, AppConfig rolls the
+flag back to the previous version on its own. It does not watch the alarms
+after the bake ends. To roll back by hand:
+
+```sh
+# During a deployment: rolls back (state ROLLED_BACK).
+aws appconfig stop-deployment --profile personal \
+  --application-id "$APP_ID" --environment-id "$ENV_ID" --deployment-number <n>
+
+# After a deployment completed, within 72 hours: reverts (state REVERTED).
+aws appconfig stop-deployment --profile personal \
+  --application-id "$APP_ID" --environment-id "$ENV_ID" --deployment-number <n> \
+  --allow-revert
+```
+
+After 72 hours, deploy a version with every variant disabled. Use the
+predefined `AppConfig.AllAtOnce` strategy for that deployment to switch
+everyone off at once.
+
+A render Lambda that fails to start at all is the one failure this does not
+cover, because the baked-page fallback runs inside the same function. The flag
+does not help there; roll back the CDK deploy.
+
+### While the rollout is active
+
+`RENDER_ROLLOUT_ACTIVE=1` is set on the render Lambda, the three content write
+functions (through `rolloutActive: true` on `ContentApi`) and the
+`DevImporter`. It does two things:
+
+- Render responses send `Cache-Control: private, no-store`, and the render
+  behavior uses a cache policy with a zero default TTL, so CloudFront asks the
+  Lambda on every request and the flag is evaluated per visitor.
+- Content writes and the daily import also start the publisher, so the baked
+  pages the off path serves stay current. The write responses then include a
+  `buildId`. A failed publisher start never fails the write.
+
+With caching off, `stale-if-error` has nothing to serve during an outage. The
+baked-page fallback and the rollback alarms cover that window.
+
+### Remove the flag at 100%
+
+Once the flag has been at 100% with no alarm for a few days, remove it in a
+code change:
+
+1. Delete the flag read and the off path from `src/middleware.ts` (`getRenderFlag`,
+   `serveOffPath`) and the off-path modules and tests.
+2. Drop `RENDER_ROLLOUT_ACTIVE` from the render Lambda and the `DevImporter`
+   in `infra/lib/delivery-stack.ts`, and pass `rolloutActive: false` to
+   `ContentApi`. That restores `DYNAMIC_CACHE_CONTROL` (`s-maxage=300`,
+   `stale-if-error=86400`), stops the rollout-time publisher builds, and drops
+   the write functions' `codebuild:StartBuild` grant.
+3. Put the render behavior back on the original render cache policy, remove the
+   site-bucket read grant for baked pages, and remove the AppConfig Agent layer
+   and IAM from the render Lambda.
+4. Keep the `vid` cookie and the AppConfig application if the homepage A/B test
+   will use them; otherwise remove them too.
+
+A missing `site/content.v1.json` or an S3 read failure then returns an uncached
+502 again, and CloudFront serves the last good page through `stale-if-error`.

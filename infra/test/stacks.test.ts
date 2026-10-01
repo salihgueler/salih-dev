@@ -220,8 +220,8 @@ test("creates static delivery and daily publishing resources", () => {
   const { delivery } = createStacks();
 
   delivery.resourceCountIs("AWS::CloudFront::Distribution", 1);
-  delivery.resourceCountIs("AWS::CloudFront::Function", 2);
-  delivery.resourceCountIs("AWS::CodeBuild::Project", 1);
+  delivery.resourceCountIs("AWS::CloudFront::Function", 5);
+  delivery.resourceCountIs("AWS::CodeBuild::Project", 2);
   delivery.resourceCountIs("AWS::Scheduler::Schedule", 1);
   delivery.resourceCountIs("AWS::SQS::Queue", 1);
   delivery.hasResourceProperties("AWS::Scheduler::Schedule", {
@@ -383,7 +383,12 @@ test("configures isolated talk functions, environments, and one-month logs", () 
       [
         "CONTENT_ALLOWED_CALLER_ARNS",
         "CONTENT_BUCKET_NAME",
-        ...(functionCase.publisher ? ["PUBLISHER_PROJECT_NAME"] : []),
+        // The invalidating (publisher) functions carry the distribution id and,
+        // while the render rollout is active, the dual-write markers that let
+        // them also start the publisher build (render-rollout-flag, Part 2).
+        ...(functionCase.publisher
+          ? ["DISTRIBUTION_ID", "RENDER_ROLLOUT_ACTIVE", "PUBLISHER_PROJECT_NAME"]
+          : []),
       ].sort(),
     );
   }
@@ -528,7 +533,8 @@ test("grants each talk handler only its task-scoped actions and prefixes", () =>
     delivery,
     "/ContentApi/TalkUploadCompleteFunction/ServiceRole/DefaultPolicy/Resource",
   );
-  assert.equal(completion.length, 5);
+  // 5 PR #10 statements + the render-rollout dual-write StartBuild grant.
+  assert.equal(completion.length, 6);
   assertStatement(completion[0], ["s3:ListBucket"], "ContentBucket");
   assert.deepEqual(completion[0].Condition, {
     StringLike: {
@@ -550,13 +556,19 @@ test("grants each talk handler only its task-scoped actions and prefixes", () =>
     ["s3:GetObject", "s3:PutObject"],
     "/talks/records/*",
   );
-  assertStatement(completion[4], ["codebuild:StartBuild"], "Publisher");
+  assertStatement(
+    completion[4],
+    ["cloudfront:CreateInvalidation"],
+    "distribution/",
+  );
+  // render-rollout-flag dual write: StartBuild on the publisher project only.
+  assertStatement(completion[5], ["codebuild:StartBuild"], "Publisher");
 
   const records = policyStatements(
     delivery,
     "/ContentApi/TalkRecordsFunction/ServiceRole/DefaultPolicy/Resource",
   );
-  assert.equal(records.length, 4);
+  assert.equal(records.length, 5);
   assertStatement(records[0], ["s3:ListBucket"], "ContentBucket");
   assert.deepEqual(records[0].Condition, {
     StringLike: { "s3:prefix": ["talks/records/*"] },
@@ -567,7 +579,13 @@ test("grants each talk handler only its task-scoped actions and prefixes", () =>
     "/talks/records/*",
   );
   assertStatement(records[2], ["s3:DeleteObject"], "/talks/decks/*");
-  assertStatement(records[3], ["codebuild:StartBuild"], "Publisher");
+  assertStatement(
+    records[3],
+    ["cloudfront:CreateInvalidation"],
+    "distribution/",
+  );
+  // render-rollout-flag dual write: StartBuild on the publisher project only.
+  assertStatement(records[4], ["codebuild:StartBuild"], "Publisher");
 
   const talkPolicies = [...start, ...completion, ...records];
   const serialized = JSON.stringify(talkPolicies);
@@ -654,8 +672,303 @@ test("adds no extra storage, identity, or public editor surface", () => {
   delivery.resourceCountIs("AWS::IAM::AccessKey", 0);
   delivery.resourceCountIs("AWS::Cognito::UserPool", 0);
   delivery.resourceCountIs("AWS::Cognito::IdentityPool", 0);
-  delivery.resourceCountIs("AWS::Lambda::Url", 0);
+  // The only Function URL is the render origin, and it is IAM-authed (reachable
+  // only through CloudFront via OAC), not a public editor surface.
+  delivery.resourceCountIs("AWS::Lambda::Url", 1);
+  delivery.hasResourceProperties("AWS::Lambda::Url", {
+    AuthType: "AWS_IAM",
+  });
   delivery.resourceCountIs("AWS::ApiGatewayV2::DomainName", 0);
+});
+
+test("adds a read-only render origin behind CloudFront for the dynamic routes", () => {
+  const { delivery } = createStacks();
+
+  // The render Lambda is Node 24 arm64, like the content functions.
+  const render = findResource(
+    delivery,
+    "AWS::Lambda::Function",
+    "/RenderFunction/Resource",
+  );
+  assert.deepEqual(render.Properties.Architectures, ["arm64"]);
+  assert.equal(render.Properties.Runtime, "nodejs24.x");
+  assert.deepEqual(
+    Object.keys(environmentVariables(render)).sort(),
+    [
+      // PR #10 base.
+      "CONTENT_BUCKET_NAME",
+      "SALIH_DEV_SSR",
+      // render-rollout-flag: the AppConfig flag coordinates, the extension
+      // prefetch path, the off-path site bucket, and the rollout marker.
+      "APPCONFIG_APPLICATION",
+      "APPCONFIG_ENVIRONMENT",
+      "APPCONFIG_PROFILE",
+      "AWS_APPCONFIG_EXTENSION_PREFETCH_LIST",
+      "RENDER_ROLLOUT_ACTIVE",
+      "SITE_BUCKET_NAME",
+    ].sort(),
+  );
+
+  // Read-only, least-privilege: GetObject + prefix-scoped ListBucket only, and
+  // no write, delete, StartBuild, or CreateInvalidation.
+  const renderStatements = policyStatements(
+    delivery,
+    "/RenderFunction/ServiceRole/DefaultPolicy/Resource",
+  );
+  const renderActions = renderStatements.flatMap((statement) =>
+    typeof statement.Action === "string"
+      ? [statement.Action]
+      : (statement.Action as string[]),
+  );
+  assert.ok(renderActions.includes("s3:GetObject"));
+  assert.ok(renderActions.includes("s3:ListBucket"));
+  for (const forbidden of [
+    "s3:PutObject",
+    "s3:DeleteObject",
+    "codebuild:StartBuild",
+    "cloudfront:CreateInvalidation",
+  ]) {
+    assert.ok(
+      !renderActions.includes(forbidden),
+      `render role must not have ${forbidden}`,
+    );
+  }
+  // The render role now has TWO ListBucket statements: the PR #10 content-bucket
+  // one (talk records/decks + posts) and the off-path SITE-bucket one (baked
+  // dynamic routes). Select the content-bucket one by its exact prefix set.
+  const listStatements = renderStatements.filter((statement) =>
+    (typeof statement.Action === "string"
+      ? [statement.Action]
+      : (statement.Action as string[])
+    ).includes("s3:ListBucket"),
+  );
+  const contentListStatement = listStatements.find(
+    (statement) =>
+      JSON.stringify(statement.Condition) ===
+      JSON.stringify({
+        StringLike: {
+          "s3:prefix": ["talks/records/*", "talks/decks/*", "posts/*"],
+        },
+      }),
+  );
+  assert.ok(
+    contentListStatement !== undefined,
+    "the content-bucket ListBucket statement is present with its prefix scope",
+  );
+  // The off-path site-bucket ListBucket is scoped to the baked dynamic prefixes.
+  const offPathListStatement = listStatements.find(
+    (statement) =>
+      JSON.stringify(statement.Condition) ===
+      JSON.stringify({
+        StringLike: {
+          "s3:prefix": ["talks/*", "blog/*", "categories/*", "tags/*"],
+        },
+      }),
+  );
+  assert.ok(
+    offPathListStatement !== undefined,
+    "the off-path site-bucket ListBucket statement is present with its prefix scope",
+  );
+
+  // The render role reads the site object, talk records and blog posts, and
+  // never a deck object (decks are served by CloudFront from the bucket). The
+  // off path adds a SECOND GetObject on the site bucket; select the
+  // content-bucket statement by the one resource unique to it.
+  const getStatement = renderStatements.find((statement) => {
+    const actions =
+      typeof statement.Action === "string"
+        ? [statement.Action]
+        : (statement.Action as string[]);
+    return (
+      actions.includes("s3:GetObject") &&
+      JSON.stringify(statement.Resource).includes("site/content.v1.json")
+    );
+  });
+  assert.ok(getStatement !== undefined);
+  const getResources = JSON.stringify(getStatement.Resource);
+  for (const allowed of ["site/content.v1.json", "talks/records/*", "posts/*"]) {
+    assert.ok(getResources.includes(allowed), `render role must read ${allowed}`);
+  }
+  assert.ok(
+    !getResources.includes("talks/decks"),
+    "render role must not read deck objects",
+  );
+
+  // The render origin is a Function URL with IAM auth (OAC-fronted, non-public).
+  delivery.hasResourceProperties("AWS::Lambda::Url", { AuthType: "AWS_IAM" });
+
+  // Every route whose content lives in the content bucket is routed to the
+  // render origin; the default (S3) behavior keeps the rest.
+  delivery.hasResourceProperties("AWS::CloudFront::Distribution", {
+    DistributionConfig: Match.objectLike({
+      CacheBehaviors: Match.arrayWith([
+        Match.objectLike({ PathPattern: "/" }),
+        Match.objectLike({ PathPattern: "/index.md" }),
+        Match.objectLike({ PathPattern: "/talks/" }),
+        Match.objectLike({ PathPattern: "/talks/index.md" }),
+        Match.objectLike({ PathPattern: "/blog/*" }),
+        Match.objectLike({ PathPattern: "/categories/*" }),
+        Match.objectLike({ PathPattern: "/tags/*" }),
+        Match.objectLike({ PathPattern: "/rss.xml" }),
+        Match.objectLike({ PathPattern: "/sitemap.xml" }),
+        Match.objectLike({ PathPattern: "/llms.txt" }),
+        Match.objectLike({ PathPattern: "/llms-full.txt" }),
+      ]),
+    }),
+  });
+});
+
+test("serves API-authored slide decks from the content bucket, scoped to talks/decks", () => {
+  const { state, delivery } = createStacks();
+
+  // A dedicated behavior serves the public slide path from the content bucket.
+  delivery.hasResourceProperties("AWS::CloudFront::Distribution", {
+    DistributionConfig: Match.objectLike({
+      CacheBehaviors: Match.arrayWith([
+        Match.objectLike({
+          PathPattern: "/talks/slides/api/*",
+          AllowedMethods: ["GET", "HEAD"],
+          FunctionAssociations: Match.arrayWith([
+            Match.objectLike({ EventType: "viewer-request" }),
+          ]),
+        }),
+      ]),
+    }),
+  });
+
+  // CloudFront's read of the content bucket is scoped to talks/decks/* only:
+  // no statement grants s3:GetObject on the whole bucket or any other prefix.
+  const policies = state.findResources("AWS::S3::BucketPolicy");
+  const statements = Object.values(policies).flatMap(
+    (resource) =>
+      resource.Properties.PolicyDocument.Statement as Array<{
+        Action: string | string[];
+        Resource: unknown;
+        Principal?: { Service?: string };
+      }>,
+  );
+  const cloudfrontReads = statements.filter(
+    (statement) =>
+      statement.Principal?.Service === "cloudfront.amazonaws.com" &&
+      (typeof statement.Action === "string"
+        ? [statement.Action]
+        : statement.Action
+      ).includes("s3:GetObject"),
+  );
+  // Two prefix-scoped CloudFront reads exist (decks and blog images); neither is
+  // a whole-bucket grant. Select the deck one and assert it targets only decks.
+  const deckReads = cloudfrontReads.filter((statement) =>
+    JSON.stringify(statement.Resource).includes("talks/decks/*"),
+  );
+  assert.equal(deckReads.length, 1);
+  const resourceJson = JSON.stringify(deckReads[0].Resource);
+  assert.ok(
+    resourceJson.includes("talks/decks/*"),
+    "CloudFront deck read must target talks/decks/*",
+  );
+  for (const forbidden of [
+    "site/content.v1.json",
+    "talks/records/",
+    "talks/pending/",
+    "posts/",
+    "images/",
+    "state/",
+  ]) {
+    assert.ok(
+      !resourceJson.includes(forbidden),
+      `CloudFront deck read must not reach ${forbidden}`,
+    );
+  }
+  // No CloudFront read is a whole-bucket grant.
+  for (const statement of cloudfrontReads) {
+    const res = JSON.stringify(statement.Resource);
+    assert.ok(
+      !/Arn(13DAF1CD)?"\]\},"\/\*"/.test(res) && !res.endsWith('"/*"]]'),
+      `CloudFront read must not be a whole-bucket grant: ${res}`,
+    );
+  }
+});
+
+test("serves blog hero images from the content bucket, scoped to images", () => {
+  const { state, delivery } = createStacks();
+
+  delivery.hasResourceProperties("AWS::CloudFront::Distribution", {
+    DistributionConfig: Match.objectLike({
+      CacheBehaviors: Match.arrayWith([
+        Match.objectLike({
+          PathPattern: "/images/blog/*",
+          FunctionAssociations: Match.arrayWith([
+            Match.objectLike({ EventType: "viewer-request" }),
+          ]),
+        }),
+      ]),
+    }),
+  });
+
+  // The API catalog is static capability data, so it stays on the default (S3)
+  // behavior and is never routed to the render origin.
+  const distribution = Object.values(
+    delivery.findResources("AWS::CloudFront::Distribution"),
+  )[0];
+  const behaviorPatterns = (
+    distribution.Properties.DistributionConfig.CacheBehaviors as Array<{
+      PathPattern: string;
+    }>
+  ).map((behavior) => behavior.PathPattern);
+  assert.ok(
+    !behaviorPatterns.includes("/api/catalog.json"),
+    "/api/catalog.json must stay static (no dynamic behavior)",
+  );
+
+  const policies = state.findResources("AWS::S3::BucketPolicy");
+  const statements = Object.values(policies).flatMap(
+    (resource) =>
+      resource.Properties.PolicyDocument.Statement as Array<{
+        Action: string | string[];
+        Resource: unknown;
+        Principal?: { Service?: string };
+      }>,
+  );
+  const imageReads = statements.filter(
+    (statement) =>
+      statement.Principal?.Service === "cloudfront.amazonaws.com" &&
+      JSON.stringify(statement.Resource).includes("images/*"),
+  );
+  assert.equal(imageReads.length, 1);
+  const res = JSON.stringify(imageReads[0].Resource);
+  for (const forbidden of ["posts/", "talks/", "site/", "state/"]) {
+    assert.ok(!res.includes(forbidden), `image read must not reach ${forbidden}`);
+  }
+});
+
+test("imports DEV posts without a build or a site-bucket sync", () => {
+  const { delivery } = createStacks();
+
+  const projects = delivery.findResources("AWS::CodeBuild::Project");
+  const specs = Object.values(projects).map((p) =>
+    JSON.stringify(p.Properties.Source.BuildSpec),
+  );
+  const importSpec = specs.find(
+    (s) => s.includes("import:dev") && !s.includes("npm run build"),
+  );
+  assert.ok(
+    importSpec !== undefined,
+    "an import-only project (import:dev, no npm run build) must exist",
+  );
+  assert.ok(
+    !importSpec.includes("SITE_BUCKET") && !importSpec.includes("sync dist/"),
+    "the importer must not sync the site bucket or dist/",
+  );
+  assert.ok(importSpec.includes("/blog/*"));
+  assert.ok(importSpec.includes("/images/blog/*"));
+  assert.ok(
+    !importSpec.includes('"/*"'),
+    "the importer must invalidate scoped paths, not /*",
+  );
+
+  delivery.hasResourceProperties("AWS::Scheduler::Schedule", {
+    ScheduleExpression: "cron(15 3 * * ? *)",
+  });
 });
 
 test("adds privacy-first analytics and low-cost monitoring", () => {
@@ -669,8 +982,8 @@ test("adds privacy-first analytics and low-cost monitoring", () => {
   delivery.resourceCountIs("AWS::Athena::NamedQuery", 3);
 
   // Monitoring: analytics widget, homepage checker, five content API functions,
-  // operations dashboard, and no browser canary.
-  delivery.resourceCountIs("AWS::Lambda::Function", 7);
+  // the request-time render function, operations dashboard, and no browser canary.
+  delivery.resourceCountIs("AWS::Lambda::Function", 8);
   const lambdaFunctions = delivery.findResources("AWS::Lambda::Function");
   const contentAllowLists = Object.values(lambdaFunctions)
     .map(
@@ -686,8 +999,27 @@ test("adds privacy-first analytics and low-cost monitoring", () => {
   delivery.resourceCountIs("AWS::CloudWatch::Dashboard", 1);
   delivery.resourceCountIs("AWS::Synthetics::Canary", 0);
 
-  // Build failure alarm plus CloudFront 4xx/5xx and two homepage-check alarms.
-  delivery.resourceCountIs("AWS::CloudWatch::Alarm", 5);
+  // Importer and publisher build-failure alarms plus CloudFront 4xx/5xx and two
+  // homepage-check alarms (6), plus the three render-rollout alarms (render
+  // errors, p95 latency and handled render failures) that AppConfig watches as
+  // monitors (9 total).
+  delivery.resourceCountIs("AWS::CloudWatch::Alarm", 9);
+
+  // A failed publisher build must alarm: during the rollout it is what keeps
+  // the baked pages behind the flag-off path and the on-path fallback current.
+  const publisherId = Object.keys(delivery.findResources("AWS::CodeBuild::Project")).find(
+    (id) => id.startsWith("Publisher"),
+  );
+  assert.ok(publisherId, "publisher CodeBuild project exists");
+  delivery.hasResourceProperties("AWS::CloudWatch::Alarm", {
+    AlarmActions: Match.anyValue(),
+    ComparisonOperator: "GreaterThanOrEqualToThreshold",
+    Dimensions: [{ Name: "ProjectName", Value: { Ref: publisherId } }],
+    MetricName: "FailedBuilds",
+    Namespace: "AWS/CodeBuild",
+    Period: 3600,
+    Threshold: 1,
+  });
 
   // Selected log fields must exclude visitor identifiers.
   const deliveries = delivery.findResources("AWS::Logs::Delivery");

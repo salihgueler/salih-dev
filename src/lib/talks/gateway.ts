@@ -25,16 +25,16 @@
  * writes, repairs, or rewrites an author-managed record or slide asset.
  */
 
-import { validatePdfAsset, type SlideAssetValidationOptions } from "./asset";
-import { deriveTalkIdentity, type TalkIdentity } from "./identity";
+import { validatePdfAsset, type SlideAssetValidationOptions } from "./asset.js";
+import { deriveTalkIdentity, type TalkIdentity } from "./identity.js";
 import {
   isPublishedTalk,
   TalkValidationError,
   type PublishedTalk,
   type ValidatedTalk,
   type ValidationIssue,
-} from "./model";
-import { normalizeTalkCandidate, validateSlidePath } from "./validation";
+} from "./model.js";
+import { normalizeTalkCandidate, validateSlidePath } from "./validation.js";
 
 /** Build-time overrides, currently limited to the slide-directory root. */
 export type TalksGatewayOptions = SlideAssetValidationOptions;
@@ -317,63 +317,8 @@ export function selectPublishedTalks(
   return Object.freeze(sortPublishedTalks(published));
 }
 
-/** Reads the raw `talks` collection. The only such read in the codebase. */
-async function readTalkCollection(): Promise<readonly TalkSourceRecord[]> {
-  const { getCollection } = await import("astro:content");
-  const entries = await getCollection("talks");
-
-  return entries.map((entry) =>
-    Object.freeze({ id: entry.id, data: entry.data }),
-  );
-}
-
-/**
- * Every valid talk record, drafts included, after metadata and PDF validation.
- * Throws `TalkValidationError` when any record is invalid.
- */
-export async function getValidatedTalks(
-  options: TalksGatewayOptions = {},
-): Promise<readonly ValidatedTalk[]> {
-  return resolveValidatedTalks(await readTalkCollection(), options);
-}
-
-/**
- * The published talk snapshot: no drafts, newest first, immutable.
- *
- * Prefer `getPublishedTalksSnapshot()` from generation code so every output
- * shares one resolution of the same validated records.
- */
-export async function getPublishedTalks(
-  options: TalksGatewayOptions = {},
-): Promise<readonly PublishedTalk[]> {
-  return selectPublishedTalks(await getValidatedTalks(options));
-}
-
-let publishedSnapshot: Promise<readonly PublishedTalk[]> | null = null;
-
-/**
- * One shared published snapshot for the whole generation pass.
- *
- * The HTML archive, the Markdown alternate, the sitemap, and the LLM discovery
- * indexes await this promise instead of rereading raw records, which is what
- * guarantees the human-readable and machine-readable outputs are derived from
- * the same validated version of every record.
- *
- * A failed resolution is not cached, so a retry revalidates rather than
- * replaying a stale error.
- */
-export function getPublishedTalksSnapshot(): Promise<readonly PublishedTalk[]> {
-  if (publishedSnapshot === null) {
-    publishedSnapshot = getPublishedTalks().catch((error: unknown) => {
-      publishedSnapshot = null;
-      throw error;
-    });
-  }
-
-  return publishedSnapshot;
-}
-
-/** Discards the shared snapshot. Intended for verification and fixtures. */
-export function resetPublishedTalksSnapshot(): void {
-  publishedSnapshot = null;
-}
+// The Astro `talks` collection boundary (`getValidatedTalks`,
+// `getPublishedTalks`, `getPublishedTalksSnapshot`) lives in `gateway-astro.ts`
+// so this module stays free of the `astro:content` virtual module and its
+// pure helpers can be reused from a plain Node runtime (the request-time
+// renderer) as well as from the Astro build.

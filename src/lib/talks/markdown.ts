@@ -21,8 +21,8 @@
  *    percent-encoded. Author values are never interpreted as Markdown.
  */
 
-import type { HttpsUrl, PublishedTalk } from "./model";
-import { formatTalkDate, TALKS_EMPTY_MESSAGE } from "./projection";
+import type { HttpsUrl, PublishedTalk } from "./model.js";
+import { formatTalkDate, TALKS_EMPTY_MESSAGE } from "./projection.js";
 
 /** Level-one heading of the Talks Markdown document. */
 export const TALKS_DOCUMENT_TITLE = "Talks";

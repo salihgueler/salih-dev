@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import test from "node:test";
 
-import { CodeBuildClient, StartBuildCommand } from "@aws-sdk/client-codebuild";
+import {
+  CloudFrontClient,
+  CreateInvalidationCommand,
+} from "@aws-sdk/client-cloudfront";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -40,7 +43,7 @@ type StoredRecord = Readonly<{
 type StoreState = {
   apiRecords: Map<string, StoredRecord>;
   approvedDecks: Set<string>;
-  buildCalls: number;
+  invalidationCalls: number;
   gitRecordKeys: Set<string>;
   s3Calls: string[];
 };
@@ -57,7 +60,7 @@ type RemovalHandler = (
 
 const AUTHOR_ARN = "arn:aws:iam::111122223333:root";
 const BUCKET_NAME = "local-test-content";
-const PROJECT_NAME = "local-test-publisher";
+const DISTRIBUTION_ID = "LOCALTESTDIST";
 const VERSION = '"property-version"';
 
 const ownershipArbitrary = fc.constantFrom<Ownership>("api", "git", "absent");
@@ -126,7 +129,7 @@ function createState(scenario: Scenario): Readonly<{
   const state: StoreState = {
     apiRecords: new Map(),
     approvedDecks: new Set(),
-    buildCalls: 0,
+    invalidationCalls: 0,
     gitRecordKeys: new Set(),
     s3Calls: [],
   };
@@ -280,7 +283,7 @@ test("Property 12: only API-owned talks are removable and rejected removals pres
   const originalEnvironment = {
     CONTENT_ALLOWED_CALLER_ARNS: process.env.CONTENT_ALLOWED_CALLER_ARNS,
     CONTENT_BUCKET_NAME: process.env.CONTENT_BUCKET_NAME,
-    PUBLISHER_PROJECT_NAME: process.env.PUBLISHER_PROJECT_NAME,
+    DISTRIBUTION_ID: process.env.DISTRIBUTION_ID,
     REPOSITORY_TALK_RECORD_KEYS: process.env.REPOSITORY_TALK_RECORD_KEYS,
   };
 
@@ -335,14 +338,14 @@ test("Property 12: only API-owned talks are removable and rejected removals pres
     throw new Error(`Unexpected S3 command: ${command?.constructor.name}`);
   });
 
-  const restoreCodeBuild = installSendStub(
-    CodeBuildClient.prototype,
+  const restoreCloudFront = installSendStub(
+    CloudFrontClient.prototype,
     async (command) => {
       const state = requiredState(currentState);
-      assert.ok(command instanceof StartBuildCommand);
-      assert.equal(command.input.projectName, PROJECT_NAME);
-      state.buildCalls += 1;
-      return { build: { id: "local-build" } };
+      assert.ok(command instanceof CreateInvalidationCommand);
+      assert.equal(command.input.DistributionId, DISTRIBUTION_ID);
+      state.invalidationCalls += 1;
+      return { Invalidation: { Id: "local-invalidation" } };
     },
   );
 
@@ -350,7 +353,7 @@ test("Property 12: only API-owned talks are removable and rejected removals pres
     console.log = () => undefined;
     process.env.CONTENT_ALLOWED_CALLER_ARNS = AUTHOR_ARN;
     process.env.CONTENT_BUCKET_NAME = BUCKET_NAME;
-    process.env.PUBLISHER_PROJECT_NAME = PROJECT_NAME;
+    process.env.DISTRIBUTION_ID = DISTRIBUTION_ID;
 
     await fc.assert(
       fc.asyncProperty(scenarioArbitrary, async (scenario) => {
@@ -370,7 +373,7 @@ test("Property 12: only API-owned talks are removable and rejected removals pres
 
         if (scenario.targetOwnership === "api") {
           assert.equal(result.statusCode, 202);
-          assert.equal(body.status, "publishing");
+          assert.equal(body.status, "published");
           assert.equal(body.recordKey, targetKey);
           assert.ok(target !== undefined);
           assert.equal(state.apiRecords.has(targetKey), false);
@@ -384,7 +387,7 @@ test("Property 12: only API-owned talks are removable and rejected removals pres
             ),
             before.gitRecordKeys,
           );
-          assert.equal(state.buildCalls, 1);
+          assert.equal(state.invalidationCalls, 1);
           assert.deepEqual(state.s3Calls, [
             `get:talks/records/${targetKey}.json`,
             `delete:talks/records/${targetKey}.json`,
@@ -394,7 +397,7 @@ test("Property 12: only API-owned talks are removable and rejected removals pres
         }
 
         assert.deepEqual(snapshot(state), before);
-        assert.equal(state.buildCalls, 0);
+        assert.equal(state.invalidationCalls, 0);
 
         if (scenario.targetOwnership === "git") {
           assert.equal(result.statusCode, 409);
@@ -412,7 +415,7 @@ test("Property 12: only API-owned talks are removable and rejected removals pres
     );
   } finally {
     currentState = null;
-    restoreCodeBuild();
+    restoreCloudFront();
     restoreS3();
     console.log = originalConsoleLog;
 

@@ -18,7 +18,7 @@
  * pieces from here so the two cannot drift apart.
  */
 
-import type { TalkFilterOption } from "./model";
+import type { TalkFilterOption } from "./model.js";
 
 /** Stable identifier of the "All talks" option. */
 export const ALL_TALKS_FILTER_ID = "all-talks";

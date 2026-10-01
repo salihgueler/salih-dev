@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { CodeBuildClient } from "@aws-sdk/client-codebuild";
+import { CloudFrontClient } from "@aws-sdk/client-cloudfront";
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
@@ -41,7 +41,7 @@ type MutationCounts = {
   approvedDeckWrites: number;
   recordWrites: number;
   deletes: number;
-  publisherInvocations: number;
+  invalidationInvocations: number;
 };
 
 function completionEvent(): APIGatewayProxyEventV2WithIAMAuthorizer {
@@ -211,21 +211,21 @@ test("Property 13: every rejected deck fails closed with exactly one approved cr
     S3Client.prototype,
     "send",
   );
-  const originalCodeBuildSend = Object.getOwnPropertyDescriptor(
-    CodeBuildClient.prototype,
+  const originalCloudFrontSend = Object.getOwnPropertyDescriptor(
+    CloudFrontClient.prototype,
     "send",
   );
   const originalConsoleLog = console.log;
   const originalAllowedArns = process.env.CONTENT_ALLOWED_CALLER_ARNS;
   const originalBucket = process.env.CONTENT_BUCKET_NAME;
-  const originalPublisher = process.env.PUBLISHER_PROJECT_NAME;
+  const originalDistribution = process.env.DISTRIBUTION_ID;
 
   let activeScenario: RejectionScenario | null = null;
   let mutationCounts: MutationCounts = {
     approvedDeckWrites: 0,
     recordWrites: 0,
     deletes: 0,
-    publisherInvocations: 0,
+    invalidationInvocations: 0,
   };
 
   Object.defineProperty(S3Client.prototype, "send", {
@@ -283,18 +283,18 @@ test("Property 13: every rejected deck fails closed with exactly one approved cr
     writable: true,
   });
 
-  Object.defineProperty(CodeBuildClient.prototype, "send", {
+  Object.defineProperty(CloudFrontClient.prototype, "send", {
     configurable: true,
     value: async (): Promise<unknown> => {
-      mutationCounts.publisherInvocations += 1;
-      return { build: { id: "unexpected-build" } };
+      mutationCounts.invalidationInvocations += 1;
+      return { Invalidation: { Id: "unexpected-invalidation" } };
     },
     writable: true,
   });
 
   process.env.CONTENT_ALLOWED_CALLER_ARNS = ALLOWED_ARN;
   process.env.CONTENT_BUCKET_NAME = "local-property-test-bucket";
-  process.env.PUBLISHER_PROJECT_NAME = "local-property-test-publisher";
+  process.env.DISTRIBUTION_ID = "LOCALPROPERTYTESTDIST";
   console.log = (): void => undefined;
 
   try {
@@ -306,7 +306,7 @@ test("Property 13: every rejected deck fails closed with exactly one approved cr
             approvedDeckWrites: 0,
             recordWrites: 0,
             deletes: 0,
-            publisherInvocations: 0,
+            invalidationInvocations: 0,
           };
 
           const result = await handler(
@@ -336,7 +336,7 @@ test("Property 13: every rejected deck fails closed with exactly one approved cr
             approvedDeckWrites: 0,
             recordWrites: 0,
             deletes: 0,
-            publisherInvocations: 0,
+            invalidationInvocations: 0,
           });
         }
       }),
@@ -347,8 +347,8 @@ test("Property 13: every rejected deck fails closed with exactly one approved cr
     console.log = originalConsoleLog;
     restoreEnvironment("CONTENT_ALLOWED_CALLER_ARNS", originalAllowedArns);
     restoreEnvironment("CONTENT_BUCKET_NAME", originalBucket);
-    restoreEnvironment("PUBLISHER_PROJECT_NAME", originalPublisher);
+    restoreEnvironment("DISTRIBUTION_ID", originalDistribution);
     restoreProperty(S3Client.prototype, "send", originalS3Send);
-    restoreProperty(CodeBuildClient.prototype, "send", originalCodeBuildSend);
+    restoreProperty(CloudFrontClient.prototype, "send", originalCloudFrontSend);
   }
 });
