@@ -8,5 +8,7 @@ declare namespace App {
      * in the static build and on baked pages.
      */
     readerCounts?: boolean;
+    /** Whether the `comments` flag is on for this visitor. Same rules. */
+    comments?: boolean;
   }
 }

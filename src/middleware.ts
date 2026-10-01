@@ -17,7 +17,12 @@ import {
   FAILURE_CACHE_CONTROL,
   successCacheControl,
 } from "./lib/render-cache";
-import { getFlag, getRenderFlag, READER_COUNTS_FLAG_KEY } from "./lib/flags";
+import {
+  COMMENTS_FLAG_KEY,
+  getFlag,
+  getRenderFlag,
+  READER_COUNTS_FLAG_KEY,
+} from "./lib/flags";
 import { isBlogPostHtmlPath } from "./lib/reader-counts";
 import {
   RENDER_PATH_HEADER,
@@ -193,9 +198,17 @@ async function renderDynamic(
   // Reader counts (a second flag): only a blog post's HTML page shows them,
   // and only request-time renders, so the baked pages never carry the widget.
   // A failed read is off, like every flag read.
-  context.locals.readerCounts = isBlogPostHtmlPath(context.url.pathname)
-    ? await getFlag(READER_COUNTS_FLAG_KEY, vid)
-    : false;
+  // Comments are a third flag with the same rules. Each feature has its own
+  // flag, so each can be on for different visitors and roll back alone.
+  const isPost = isBlogPostHtmlPath(context.url.pathname);
+  const [readerCounts, comments] = isPost
+    ? await Promise.all([
+        getFlag(READER_COUNTS_FLAG_KEY, vid),
+        getFlag(COMMENTS_FLAG_KEY, vid),
+      ])
+    : [false, false];
+  context.locals.readerCounts = readerCounts;
+  context.locals.comments = comments;
 
   let rendered: Response;
   try {

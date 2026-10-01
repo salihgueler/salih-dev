@@ -23,6 +23,7 @@ const templates = (() => {
     env,
     hostedZone: state.hostedZone,
     readerCountsTable: state.readerCountsTable,
+    commentsTable: state.commentsTable,
   });
   return { state: Template.fromStack(state), delivery: Template.fromStack(delivery) };
 })();
@@ -70,7 +71,11 @@ test("the readers role has only the four table actions it uses", () => {
         (resource.Properties as { PolicyDocument: { Statement: Array<{ Action: unknown }> } })
           .PolicyDocument.Statement,
     )
-    .filter((statement) => JSON.stringify(statement.Action).includes("dynamodb:"));
+    .filter(
+      (statement) =>
+        JSON.stringify(statement.Action).includes("dynamodb:") &&
+        JSON.stringify((statement as { Resource?: unknown }).Resource).includes("ReaderCounts"),
+    );
   assert.equal(statements.length, 1);
   assert.deepEqual(statements[0].Action, [
     "dynamodb:PutItem",

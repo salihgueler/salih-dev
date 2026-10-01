@@ -862,3 +862,73 @@ and makes the API answer 404 immediately, so open tabs stop writing.
 The account's Lambda concurrency limit is 10 and every function shares it.
 Each open post tab with the counter makes one readers request every 30
 seconds. Request a quota increase before going past 10%.
+
+## 13. Comments with the `comments` flag
+
+Comments on blog posts are held until you approve them. The `comments` flag is
+the third flag in the `render-flags` profile, and it rolls out like
+`readerCounts` (section 12). Design: `.kiro/specs/comments/design.md`.
+
+### Deploy and subscribe
+
+Deploy the state stack (the `Comments` table), then the delivery stack (the
+comments function, `/api/comments/*`, the moderation routes and
+`CommentsErrorsAlarm`). Then subscribe your email to the "comment is waiting"
+topic once and confirm the mail AWS sends:
+
+```sh
+COMMENTS_TOPIC=$(aws sns list-topics --profile personal --region us-east-1 \
+  --query "Topics[?contains(TopicArn, 'CommentsTopic')].TopicArn" --output text)
+aws sns subscribe --profile personal --region us-east-1 \
+  --topic-arn "$COMMENTS_TOPIC" --protocol email --notification-endpoint <your-email>
+```
+
+Check the deploy the same way as section 12. A `GET` on
+`https://salih.dev/api/comments/<slug>` with any `vid` cookie should return 404
+while the flag is off.
+
+### Turn it on
+
+Add `comments` to `.cache/render-flags.json` next to the other two flags, with
+the same `author` rule, and deploy it. Every flag version must contain all three
+flags. To give yourself both features, both flags carry the same rule, and one
+deployment turns both on.
+
+### Moderate
+
+Use the content API credentials from section 5 (`SITE_CONTENT_API` and the
+`--aws-sigv4` flags):
+
+```sh
+SIGV4=(--aws-sigv4 "aws:amz:us-east-1:execute-api"
+  --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY"
+  --header "x-amz-security-token: $AWS_SESSION_TOKEN")
+
+# What's waiting
+curl --fail-with-body "${SIGV4[@]}" "$SITE_CONTENT_API/v1/comments/pending"
+
+# Approve one
+curl --fail-with-body "${SIGV4[@]}" --request POST \
+  "$SITE_CONTENT_API/v1/comments/pending/<commentId>/approval"
+
+# Reject one
+curl --fail-with-body "${SIGV4[@]}" --request DELETE \
+  "$SITE_CONTENT_API/v1/comments/pending/<commentId>"
+
+# Remove an approved one
+curl --fail-with-body "${SIGV4[@]}" --request DELETE \
+  "$SITE_CONTENT_API/v1/comments/<slug>/<commentId>"
+```
+
+An approved comment shows up on the next page load. A comment nobody approves
+disappears from the queue after 30 days. Moderation works even with the flag
+off.
+
+### Rollback and limits
+
+`CommentsErrorsAlarm` is the fifth AppConfig monitor, which is the maximum per
+environment. It fires on two or more comments API failures in a minute. Turning
+`comments` off hides the section on the next page load and makes the API answer
+404 at once. Visitors get 3 comments an hour each. The honeypot field and the
+link limit (two per comment) catch simple bots. Everything else waits for you
+in the queue.
