@@ -18,6 +18,12 @@ const UUID_V4 =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 const FLAG_TIMEOUT_MS = 300;
+// The first flag read on a new instance pays for the fetch client loading and
+// the agent's first answer. In production that took longer than 300 ms, so a
+// cold instance read every flag as off and answered 404. Warm reads keep the
+// short budget.
+const FIRST_FLAG_TIMEOUT_MS = 1500;
+let warmFlagRead = false;
 const POST_CACHE_MS = 5 * 60 * 1000;
 
 export type PublicApiEvent = Pick<
@@ -64,18 +70,24 @@ export async function readFlagFromAgent(key: string, vid: string): Promise<boole
   const environment = process.env.APPCONFIG_ENVIRONMENT ?? "";
   const profile = process.env.APPCONFIG_PROFILE ?? "";
   if (application === "" || environment === "" || profile === "") return false;
+  // 127.0.0.1, not localhost: the agent only listens on IPv4 (it logs that it
+  // can't bind [::1]), and localhost can resolve to ::1 first.
   const url =
-    `http://localhost:2772/applications/${encodeURIComponent(application)}` +
+    `http://127.0.0.1:2772/applications/${encodeURIComponent(application)}` +
     `/environments/${encodeURIComponent(environment)}` +
     `/configurations/${encodeURIComponent(profile)}` +
     `?flag=${encodeURIComponent(key)}`;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FLAG_TIMEOUT_MS);
+  const timer = setTimeout(
+    () => controller.abort(),
+    warmFlagRead ? FLAG_TIMEOUT_MS : FIRST_FLAG_TIMEOUT_MS,
+  );
   try {
     const response = await fetch(url, {
       headers: { Context: `vid=${vid}` },
       signal: controller.signal,
     });
+    warmFlagRead = true;
     if (!response.ok) return false;
     // A single-flag read returns the flag's attributes at the top level.
     const body: unknown = await response.json();
