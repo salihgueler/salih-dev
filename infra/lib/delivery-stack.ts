@@ -739,8 +739,8 @@ export class SalihDevDeliveryStack extends Stack {
       viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
     };
 
-    // Comments use the same request policy: the `vid` cookie and the payload
-    // hash header, nothing else. GET and POST both reach the function uncached.
+    // Comments use the same request policy: only the `vid` cookie. GET and
+    // POST both reach the function uncached.
     const commentsBehavior: cloudfront.BehaviorOptions = {
       ...readersBehavior,
       origin: commentsOrigin,
