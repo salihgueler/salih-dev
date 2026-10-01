@@ -96,7 +96,9 @@ test("/api/readers/* allows POST, caches nothing and forwards only vid and the p
     OriginRequestPolicyConfig: Match.objectLike({
       Name: "salih-dev-readers",
       CookiesConfig: { CookieBehavior: "whitelist", Cookies: ["vid"] },
-      HeadersConfig: { HeaderBehavior: "whitelist", Headers: ["x-amz-content-sha256"] },
+      // CloudFront refuses x-amz-* names in an origin request policy. It uses
+      // the viewer's x-amz-content-sha256 itself when it signs for OAC.
+      HeadersConfig: { HeaderBehavior: "none" },
     }),
   });
 });

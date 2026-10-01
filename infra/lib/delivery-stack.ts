@@ -604,18 +604,18 @@ export class SalihDevDeliveryStack extends Stack {
 
     // --- Reader counts API behavior (reader-counts feature) ---
     // Nothing is cached: every heartbeat has to reach the function. Only the
-    // `vid` cookie and the payload hash header go to the origin. A Lambda
-    // Function URL behind OAC rejects unsigned POST payloads, so the browser
-    // sends `x-amz-content-sha256` with the SHA-256 of the body.
+    // `vid` cookie goes to the origin. A Lambda Function URL behind OAC rejects
+    // unsigned POST payloads, so the browser sends `x-amz-content-sha256` with
+    // the SHA-256 of the body. CloudFront reads that header when it signs the
+    // origin request, and it refuses `x-amz-*` names in an origin request
+    // policy, so the header must not be listed here.
     const readersOriginRequestPolicy = new cloudfront.OriginRequestPolicy(
       this,
       "ReadersOriginRequestPolicy",
       {
         originRequestPolicyName: "salih-dev-readers",
         cookieBehavior: cloudfront.OriginRequestCookieBehavior.allowList("vid"),
-        headerBehavior: cloudfront.OriginRequestHeaderBehavior.allowList(
-          "x-amz-content-sha256",
-        ),
+        headerBehavior: cloudfront.OriginRequestHeaderBehavior.none(),
         queryStringBehavior:
           cloudfront.OriginRequestQueryStringBehavior.none(),
       },
