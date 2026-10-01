@@ -14,7 +14,7 @@ import test from "node:test";
 import { App } from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 
-import { SalihDevDeliveryStack } from "../lib/delivery-stack";
+import { APPCONFIG_AGENT_LAYER_ARN, SalihDevDeliveryStack } from "../lib/delivery-stack";
 import { SalihDevStateStack } from "../lib/state-stack";
 
 function deliveryTemplate(): Template {
@@ -143,6 +143,19 @@ test("the render Lambda carries the AppConfig extension layer and coordinates", 
   assert.ok(
     Array.isArray(props.Layers) && props.Layers.length >= 1,
     "the render function has at least one layer (the AppConfig agent)",
+  );
+  // Multi-variant flags need agent 2.0.678+. CDK's getLambdaLayerVersionArn
+  // resolves to agent 2.0.358 (layer 61), which ignores `_variants`, so the
+  // render Lambda must carry the pinned, newer layer.
+  assert.ok(
+    props.Layers.includes(APPCONFIG_AGENT_LAYER_ARN),
+    "the render function carries the pinned AppConfig agent layer",
+  );
+  assert.ok(
+    !props.Layers.includes(
+      "arn:aws:lambda:us-east-1:027255383542:layer:AWS-AppConfig-Extension-Arm64:61",
+    ),
+    "the render function does not carry agent 2.0.358, which ignores variants",
   );
   const vars = props.Environment.Variables;
   assert.ok("AWS_APPCONFIG_EXTENSION_PREFETCH_LIST" in vars);

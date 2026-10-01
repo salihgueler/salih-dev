@@ -203,7 +203,7 @@ Three CloudWatch alarms are monitors on the environment, so AppConfig rolls a fl
 
 ### Request path
 
-- The render Lambda carries the arm64 AppConfig Agent extension (ARN resolved by `appconfig.Application.getLambdaLayerVersionArn`) with `AWS_APPCONFIG_EXTENSION_PREFETCH_LIST` set to the flag's configuration path, and `appconfig:StartConfigurationSession`/`GetLatestConfiguration` scoped to that application.
+- The render Lambda carries the arm64 AppConfig Agent extension, pinned to layer version 276 (agent 2.0.25759) as `APPCONFIG_AGENT_LAYER_ARN` in `infra/lib/delivery-stack.ts`. `appconfig.Application.getLambdaLayerVersionArn` is not used: it resolves to agent 2.0.358, which predates multi-variant flags (2.0.678) and returns the default variant for everyone. `AWS_APPCONFIG_EXTENSION_PREFETCH_LIST` is set to the flag's configuration path, and `appconfig:StartConfigurationSession`/`GetLatestConfiguration` are scoped to that application.
 - `src/lib/vid-cookie.ts` resolves the visitor id from the `vid` cookie and mints a random UUID cookie (`Max-Age=31536000; Path=/; Secure; HttpOnly; SameSite=Lax`) when it is missing. CloudFront forwards only `vid` and `Accept` to the render origin.
 - `src/lib/flags.ts` reads `renderFromBackend` from `localhost:2772` with `Context: vid=<id>` and reads `enabled` under the flag key. An error, a non-200 status, a malformed body or a 300 ms timeout returns false.
 - Flag off: `src/lib/off-path-key.ts` maps the route to its baked key in the site bucket (`/` to `index.html`, `/talks/` to `talks/index.html`, and so on) and `src/lib/off-path-render.ts` serves it with today's headers. The render role gets `s3:GetObject` on exactly those keys.

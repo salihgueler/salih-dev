@@ -10,7 +10,6 @@ import {
   type StackProps,
 } from "aws-cdk-lib";
 import * as acm from "aws-cdk-lib/aws-certificatemanager";
-import * as appconfig from "aws-cdk-lib/aws-appconfig";
 import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as cloudwatch from "aws-cdk-lib/aws-cloudwatch";
@@ -37,6 +36,14 @@ import { suppressBasicLambdaLoggingPolicy } from "./lambda-log-suppressions";
 import { viewerRequestCode, viewerRenderRequestCode, viewerResponseCode, viewerDeckRequestCode, viewerImageRequestCode } from "./edge-functions";
 import { Monitoring } from "./monitoring";
 import { PrefixScopedS3Origin } from "./prefix-scoped-s3-origin";
+
+/**
+ * AWS AppConfig Agent Lambda extension, arm64, us-east-1: layer version 276,
+ * agent 2.0.25759. See the comment where it is attached for why this is pinned
+ * instead of resolved through appconfig.Application.getLambdaLayerVersionArn.
+ */
+export const APPCONFIG_AGENT_LAYER_ARN =
+  "arn:aws:lambda:us-east-1:027255383542:layer:AWS-AppConfig-Extension-Arm64:276";
 
 export interface SalihDevDeliveryStackProps extends StackProps {
   readonly contentBucket: s3.IBucket;
@@ -321,16 +328,19 @@ export class SalihDevDeliveryStack extends Stack {
     );
 
     // The render Lambda reads the flag through the AWS AppConfig Agent, added as
-    // a Lambda extension layer. The layer ARN is Region- and
-    // architecture-specific; getLambdaLayerVersionArn resolves the arm64 ARN for
-    // this stack's Region (us-east-1), so no per-Region ARN is hard-coded.
+    // a Lambda extension layer. The ARN is pinned on purpose. CDK's
+    // appconfig.Application.getLambdaLayerVersionArn resolves us-east-1 arm64 to
+    // layer version 61, agent 2.0.358 (December 2023). Multi-variant flags need
+    // agent 2.0.678 or later, and 2.0.358 ignores `_variants`, so every visitor
+    // got the default variant and the flag could never turn on for anyone.
+    // Version 276 is agent 2.0.25759, the value of the public SSM parameter
+    // /aws/service/aws-appconfig/lambda-extension/arm64/latest on 2026-10-01.
+    // A pinned ARN keeps deploys reproducible; bump it deliberately from that
+    // parameter. The stack only deploys to us-east-1 (bin/salih-dev.ts).
     const appConfigLayer = lambda.LayerVersion.fromLayerVersionArn(
       this,
       "AppConfigAgentLayer",
-      appconfig.Application.getLambdaLayerVersionArn(
-        Stack.of(this).region,
-        appconfig.Platform.ARM_64,
-      ),
+      APPCONFIG_AGENT_LAYER_ARN,
     );
     renderFunction.addLayers(appConfigLayer);
 

@@ -34,9 +34,13 @@ function depsReturning(body: unknown, ok = true): FlagReadDeps {
   };
 }
 
-/** Wraps a flag attribute object under the flag key, as the agent returns it. */
-function agentBody(attrs: unknown): Record<string, unknown> {
-  return { [RENDER_FLAG_KEY]: attrs };
+/**
+ * The body a single-flag read (`?flag=renderFromBackend`) returns: the flag's
+ * attributes at the top level, e.g. `{"_variant":"author","enabled":true}`.
+ * Captured from the real AppConfig Agent (2.0.25759) on 2026-10-01.
+ */
+function agentBody(attrs: Record<string, unknown>): Record<string, unknown> {
+  return { _variant: "author", ...attrs };
 }
 
 test("returns true when the agent reports the flag enabled", async () => {
@@ -112,11 +116,16 @@ test("returns false when the flag key is absent from the body", async () => {
   );
 });
 
-test("returns false when enabled sits at the top level (wrong shape)", async () => {
-  // The agent nests attributes under the flag key; a top-level enabled is not
-  // the real shape and must not be read as on.
+test("returns false for the whole-profile shape (flag nested under its key)", async () => {
+  // Only a read WITHOUT ?flag= nests attributes under the flag key. The helper
+  // always sends ?flag=, so a nested body is not the shape it asked for and
+  // must not be read as on.
   assert.equal(
-    await getRenderFlag("v1", config, depsReturning({ enabled: true })),
+    await getRenderFlag(
+      "v1",
+      config,
+      depsReturning({ [RENDER_FLAG_KEY]: { _variant: "author", enabled: true } }),
+    ),
     false,
   );
 });
@@ -136,7 +145,7 @@ test("sends the vid in the Context header and the flag query", async () => {
     fetch: (async (url: string, init?: { headers?: Record<string, string> }) => {
       seenUrl = url;
       seenContext = init?.headers?.Context ?? null;
-      return new Response(JSON.stringify({ [RENDER_FLAG_KEY]: { enabled: true } }), { status: 200 });
+      return new Response(JSON.stringify({ _variant: "author", enabled: true }), { status: 200 });
     }) as unknown as typeof fetch,
   };
   await getRenderFlag("abc-123", config, deps);

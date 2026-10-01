@@ -65,21 +65,22 @@ export function flagConfigFromEnv(
 /**
  * Reads the flag's `enabled` boolean from the AppConfig Agent response.
  *
- * A single-flag read (`?flag=FLAG_KEY`) does NOT return `enabled` at the top
- * level: the agent nests each flag's attributes under its own key, e.g.
+ * A single-flag read (`?flag=FLAG_KEY`) returns that flag's attributes at the
+ * TOP level of the body, for example
  *
- *   { "renderFromBackend": { "_variant": "on", "enabled": true } }
+ *   { "_variant": "author", "enabled": true }
  *
- * (verified against the AppConfig Agent docs). So the flag object is read from
- * `body[RENDER_FLAG_KEY]` and its `enabled` checked there. A body that is not an
- * object, is missing the flag key, or whose `enabled` is not the boolean `true`
+ * Only a whole-profile read (no `?flag=`) nests each flag under its key. This
+ * was checked against the real agent (extension 2.0.25759) reading the live
+ * `render-flags` profile, and matches the AWS sample for reading a specific
+ * flag. An earlier version of this helper read `body[RENDER_FLAG_KEY].enabled`,
+ * which the single-flag response never has, so the flag always read as off.
+ * A body that is not an object, or whose `enabled` is not the boolean `true`,
  * is treated as off (the fail-safe default).
  */
 function isEnabled(body: unknown): boolean {
   if (typeof body !== "object" || body === null) return false;
-  const flag = (body as Record<string, unknown>)[RENDER_FLAG_KEY];
-  if (typeof flag !== "object" || flag === null) return false;
-  return (flag as { enabled?: unknown }).enabled === true;
+  return (body as { enabled?: unknown }).enabled === true;
 }
 
 /**

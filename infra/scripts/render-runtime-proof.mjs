@@ -104,8 +104,9 @@ function startS3Stub() {
 function startAgentStub(enabled) {
   const server = http.createServer((_req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
-    // The agent nests each flag's attributes under its own key.
-    res.end(JSON.stringify({ renderFromBackend: { enabled } }));
+    // A single-flag read (?flag=renderFromBackend) returns the flag's
+    // attributes at the top level, as the real agent does.
+    res.end(JSON.stringify({ _variant: enabled ? "author" : "default", enabled }));
   });
   return new Promise((resolve, reject) => {
     server.once("error", reject);
