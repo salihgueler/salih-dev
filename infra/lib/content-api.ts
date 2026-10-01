@@ -6,6 +6,7 @@ import { HttpIamAuthorizer } from "aws-cdk-lib/aws-apigatewayv2-authorizers";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as codebuild from "aws-cdk-lib/aws-codebuild";
+import type * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction, OutputFormat } from "aws-cdk-lib/aws-lambda-nodejs";
@@ -22,6 +23,8 @@ const API_TALK_RECORDS = "talks/records/*";
 
 export interface ContentApiProps {
   allowedCallerArns: string[];
+  /** The comments table; the moderation routes approve and remove comments. */
+  commentsTable: dynamodb.ITableV2;
   contentBucket: s3.IBucket;
   distribution: cloudfront.IDistribution;
   /**
@@ -178,6 +181,48 @@ export class ContentApi extends Construct {
         runtime: lambda.Runtime.NODEJS_24_X,
         timeout: Duration.seconds(10),
       },
+    );
+
+    // Comment moderation (comments feature): editor-only, on this IAM API.
+    const commentModerationLogs = new logs.LogGroup(
+      this,
+      "CommentModerationLogs",
+      {
+        removalPolicy: RemovalPolicy.DESTROY,
+        retention: logs.RetentionDays.ONE_MONTH,
+      },
+    );
+    const commentModerationFunction = new NodejsFunction(
+      this,
+      "CommentModerationFunction",
+      {
+        architecture: lambda.Architecture.ARM_64,
+        bundling: { minify: true, target: "node24" },
+        depsLockFilePath: lockFile,
+        entry: path.resolve(__dirname, "../functions/comment-moderation.ts"),
+        environment: {
+          CONTENT_ALLOWED_CALLER_ARNS: props.allowedCallerArns.join(","),
+          COMMENTS_TABLE_NAME: props.commentsTable.tableName,
+        },
+        logGroup: commentModerationLogs,
+        memorySize: 256,
+        projectRoot,
+        runtime: lambda.Runtime.NODEJS_24_X,
+        timeout: Duration.seconds(10),
+      },
+    );
+    // Exactly the item actions moderation uses. The approval transaction is
+    // authorized per item as DeleteItem and PutItem.
+    commentModerationFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          "dynamodb:GetItem",
+          "dynamodb:Query",
+          "dynamodb:PutItem",
+          "dynamodb:DeleteItem",
+        ],
+        resources: [props.commentsTable.tableArn],
+      }),
     );
 
     const objectArn = props.contentBucket.arnForObjects(CONTENT_KEY);
@@ -372,6 +417,31 @@ export class ContentApi extends Construct {
       path: "/v1/talks/records/{recordKey}",
     });
 
+    const moderationIntegration = new HttpLambdaIntegration(
+      "CommentModerationIntegration",
+      commentModerationFunction,
+    );
+    api.addRoutes({
+      integration: moderationIntegration,
+      methods: [apigwv2.HttpMethod.GET],
+      path: "/v1/comments/pending",
+    });
+    api.addRoutes({
+      integration: moderationIntegration,
+      methods: [apigwv2.HttpMethod.POST],
+      path: "/v1/comments/pending/{commentId}/approval",
+    });
+    api.addRoutes({
+      integration: moderationIntegration,
+      methods: [apigwv2.HttpMethod.DELETE],
+      path: "/v1/comments/pending/{commentId}",
+    });
+    api.addRoutes({
+      integration: moderationIntegration,
+      methods: [apigwv2.HttpMethod.DELETE],
+      path: "/v1/comments/{slug}/{commentId}",
+    });
+
     const accessLogs = new logs.LogGroup(this, "AccessLogs", {
       removalPolicy: RemovalPolicy.DESTROY,
       retention: logs.RetentionDays.ONE_MONTH,
@@ -400,6 +470,7 @@ export class ContentApi extends Construct {
       talkUploadStartFunction,
       talkUploadCompleteFunction,
       talkRecordsFunction,
+      commentModerationFunction,
     ]) {
       suppressBasicLambdaLoggingPolicy(fn, "one-month API execution logs");
     }

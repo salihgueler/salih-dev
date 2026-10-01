@@ -20,6 +20,7 @@ export class SalihDevStateStack extends Stack {
   public readonly contentBucket: s3.Bucket;
   public readonly hostedZone: route53.PublicHostedZone;
   public readonly readerCountsTable: dynamodb.TableV2;
+  public readonly commentsTable: dynamodb.TableV2;
 
   public constructor(
     scope: Construct,
@@ -64,6 +65,19 @@ export class SalihDevStateStack extends Stack {
           "Reader counts are a public, approximate signal that rebuilds itself from new visits; point-in-time recovery would cost more than the data is worth.",
       },
     ]);
+
+    // Blog comments, held for moderation (comments feature). Pending comments
+    // and rate-limit rows expire through TTL on `expiresAt`; approved comments
+    // have no TTL and stay until removed. Retained: approved comments are
+    // content and can't be rebuilt. See .kiro/specs/comments/design.md.
+    this.commentsTable = new dynamodb.TableV2(this, "Comments", {
+      partitionKey: { name: "pk", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "sk", type: dynamodb.AttributeType.STRING },
+      billing: dynamodb.Billing.onDemand(),
+      timeToLiveAttribute: "expiresAt",
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
 
     this.hostedZone = new route53.PublicHostedZone(this, "HostedZone", {
       zoneName: props.domainName,

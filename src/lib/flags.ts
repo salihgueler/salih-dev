@@ -28,6 +28,9 @@ export const RENDER_FLAG_KEY = "renderFromBackend";
 /** The flag that shows "reading now" and "read so far" on blog posts. */
 export const READER_COUNTS_FLAG_KEY = "readerCounts";
 
+/** The flag that shows comments and the comment form on blog posts. */
+export const COMMENTS_FLAG_KEY = "comments";
+
 /** The AppConfig Agent's fixed local HTTP port. */
 const AGENT_PORT = 2772;
 

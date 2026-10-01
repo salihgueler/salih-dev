@@ -53,6 +53,8 @@ export interface SalihDevDeliveryStackProps extends StackProps {
   readonly hostedZone: route53.IHostedZone;
   /** The reader-counts table from the state stack (reader-counts feature). */
   readonly readerCountsTable: dynamodb.ITableV2;
+  /** The comments table from the state stack (comments feature). */
+  readonly commentsTable: dynamodb.ITableV2;
 }
 
 export class SalihDevDeliveryStack extends Stack {
@@ -375,12 +377,82 @@ export class SalihDevDeliveryStack extends Stack {
       true,
     );
 
+    // --- Comments API (comments feature) ---
+    // `GET|POST /api/comments/<slug>`: list approved comments, submit one for
+    // moderation. Behind the `comments` flag (404 when off) and reachable only
+    // through CloudFront, like the readers API.
+    const commentsLogGroup = new logs.LogGroup(this, "CommentsLogs", {
+      removalPolicy: RemovalPolicy.DESTROY,
+      retention: logs.RetentionDays.ONE_MONTH,
+    });
+    // "A comment is waiting for approval" mails. Subscribe an email address
+    // to it once (DEPLOY.md section 13).
+    const commentsTopic = new sns.Topic(this, "CommentsTopic", {
+      enforceSSL: true,
+    });
+    const commentsFunction = new NodejsFunction(this, "CommentsFunction", {
+      architecture: lambda.Architecture.ARM_64,
+      bundling: { minify: true, target: "node24" },
+      depsLockFilePath: path.resolve(__dirname, "../package-lock.json"),
+      entry: path.resolve(__dirname, "../functions/comments.ts"),
+      environment: {
+        COMMENTS_TABLE_NAME: props.commentsTable.tableName,
+        COMMENTS_TOPIC_ARN: commentsTopic.topicArn,
+        CONTENT_BUCKET_NAME: props.contentBucket.bucketName,
+      },
+      logGroup: commentsLogGroup,
+      memorySize: 256,
+      projectRoot: path.resolve(__dirname, "../.."),
+      runtime: lambda.Runtime.NODEJS_24_X,
+      timeout: Duration.seconds(5),
+    });
+    // Submit (PutItem), the rate limit (UpdateItem) and the approved list
+    // (Query). It can't approve or delete: that is the moderation function.
+    commentsFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query"],
+        resources: [props.commentsTable.tableArn],
+      }),
+    );
+    commentsTopic.grantPublish(commentsFunction);
+    commentsFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["s3:GetObject"],
+        resources: [props.contentBucket.arnForObjects("posts/*")],
+      }),
+    );
+    commentsFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["s3:ListBucket"],
+        conditions: { StringLike: { "s3:prefix": ["posts/*"] } },
+        resources: [props.contentBucket.bucketArn],
+      }),
+    );
+    suppressBasicLambdaLoggingPolicy(
+      commentsFunction,
+      "one-month comments execution logs",
+    );
+    NagSuppressions.addResourceSuppressions(
+      commentsFunction,
+      [
+        {
+          id: "AwsSolutions-IAM5",
+          appliesTo: ["Resource::<ContentBucket52D4B12C.Arn>/posts/*"],
+          reason:
+            "The comments function only checks that a blog post object exists under the code-owned posts/ prefix (HeadObject, authorized as GetObject). It never writes to the bucket.",
+        },
+      ],
+      true,
+    );
+
     // --- AppConfig feature-flag control plane (render-rollout-flag) ---
     // The application, the `production` environment with the render-error and
     // p95 alarms as monitors, and the feature-flag profile holding
     // `renderFromBackend` (default off), deployed with a linear strategy and a
     // final bake time so an alarm during rollout rolls the flag back.
     const featureFlags = new FeatureFlags(this, "FeatureFlags", {
+      commentsFunction,
+      commentsLogGroup,
       readersFunction,
       readersLogGroup,
       renderFunction,
@@ -500,6 +572,43 @@ export class SalihDevDeliveryStack extends Stack {
         ],
       }),
     );
+    // The comments function reads the `comments` flag the same way.
+    commentsFunction.addLayers(appConfigLayer);
+    commentsFunction.addEnvironment(
+      "AWS_APPCONFIG_EXTENSION_PREFETCH_LIST",
+      featureFlags.configurationPath(),
+    );
+    commentsFunction.addEnvironment(
+      "APPCONFIG_APPLICATION",
+      featureFlags.application.name ?? "salih-dev",
+    );
+    commentsFunction.addEnvironment("APPCONFIG_ENVIRONMENT", "production");
+    commentsFunction.addEnvironment(
+      "APPCONFIG_PROFILE",
+      featureFlags.configuration.name ?? "render-flags",
+    );
+    commentsFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          "appconfig:StartConfigurationSession",
+          "appconfig:GetLatestConfiguration",
+        ],
+        resources: [
+          appConfigResourceArn,
+          Stack.of(this).formatArn({
+            service: "appconfig",
+            resource: "application",
+            resourceName: featureFlags.application.applicationId,
+          }),
+        ],
+      }),
+    );
+    const commentsFunctionUrl = commentsFunction.addFunctionUrl({
+      authType: lambda.FunctionUrlAuthType.AWS_IAM,
+    });
+    const commentsOrigin =
+      origins.FunctionUrlOrigin.withOriginAccessControl(commentsFunctionUrl);
+
     const readersFunctionUrl = readersFunction.addFunctionUrl({
       authType: lambda.FunctionUrlAuthType.AWS_IAM,
     });
@@ -628,6 +737,13 @@ export class SalihDevDeliveryStack extends Stack {
       origin: readersOrigin,
       responseHeadersPolicy: responseHeaders,
       viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+    };
+
+    // Comments use the same request policy: the `vid` cookie and the payload
+    // hash header, nothing else. GET and POST both reach the function uncached.
+    const commentsBehavior: cloudfront.BehaviorOptions = {
+      ...readersBehavior,
+      origin: commentsOrigin,
     };
 
     // --- API-authored slide-deck origin (content bucket, read-only, scoped) ---
@@ -769,6 +885,8 @@ export class SalihDevDeliveryStack extends Stack {
         "/talks/slides/api/*": deckBehavior,
         // Reader-count heartbeats for blog posts (reader-counts feature).
         "/api/readers/*": readersBehavior,
+        // Blog comments (comments feature).
+        "/api/comments/*": commentsBehavior,
       },
       certificate,
       defaultBehavior: {
@@ -821,7 +939,12 @@ export class SalihDevDeliveryStack extends Stack {
       principal: new iam.ServicePrincipal("cloudfront.amazonaws.com"),
       sourceArn: `arn:${this.partition}:cloudfront::${this.account}:distribution/${distribution.distributionId}`,
     });
-    // Same gap for the readers Function URL.
+    // Same gap for the comments and readers Function URLs.
+    commentsFunction.addPermission("AllowCloudFrontInvokeFunction", {
+      action: "lambda:InvokeFunction",
+      principal: new iam.ServicePrincipal("cloudfront.amazonaws.com"),
+      sourceArn: `arn:${this.partition}:cloudfront::${this.account}:distribution/${distribution.distributionId}`,
+    });
     readersFunction.addPermission("AllowCloudFrontInvokeFunction", {
       action: "lambda:InvokeFunction",
       principal: new iam.ServicePrincipal("cloudfront.amazonaws.com"),
@@ -1069,6 +1192,7 @@ export class SalihDevDeliveryStack extends Stack {
 
     new ContentApi(this, "ContentApi", {
       allowedCallerArns: [rootEditorArn],
+      commentsTable: props.commentsTable,
       contentBucket: props.contentBucket,
       distribution,
       publisherProject: project,

@@ -1,0 +1,158 @@
+---
+/**
+ * Approved comments and the comment form for a blog post.
+ *
+ * Feature: comments (see .kiro/specs/comments/design.md).
+ *
+ * Rendered only when the `comments` flag is on for this visitor (the post page
+ * checks `Astro.locals.comments`). The section starts hidden and appears once
+ * the approved list has loaded, so a failing API shows nothing. Comments are
+ * inserted with `textContent`, never as HTML. A new comment is held until it
+ * is approved, so the form never shows it straight away.
+ *
+ * The script is inline for the same reason as ReaderCounts.astro: the
+ * request-time build's hashed assets aren't in the site bucket.
+ */
+import { commentsApiPath } from "../lib/reader-counts";
+
+interface Props {
+  slug: string;
+}
+
+const { slug } = Astro.props;
+---
+
+<section
+  class="comments"
+  aria-labelledby="comments-heading"
+  data-comments={commentsApiPath(slug)}
+  hidden
+>
+  <h2 id="comments-heading">Comments</h2>
+  <p class="comments-empty" data-comments-empty hidden>No comments yet.</p>
+  <ol class="comments-list" data-comments-list></ol>
+
+  <form class="comments-form" data-comments-form novalidate>
+    <h3>Leave a comment</h3>
+    <label for="comment-name">Name <span class="comments-hint">(optional)</span></label>
+    <input id="comment-name" name="name" type="text" maxlength="40" autocomplete="nickname" />
+    <label for="comment-body">Comment</label>
+    <textarea id="comment-body" name="body" rows="5" maxlength="2000" required></textarea>
+    <div class="comments-trap" aria-hidden="true">
+      <label for="comment-website">Leave this empty</label>
+      <input id="comment-website" name="website" type="text" tabindex="-1" autocomplete="off" />
+    </div>
+    <p class="comments-hint">
+      I read every comment before it shows up here. Your name and comment are
+      shown publicly once I approve them. Nothing else about you is stored with
+      them.
+    </p>
+    <button type="submit">Send comment</button>
+    <p class="comments-status" data-comments-status role="status" aria-live="polite"></p>
+  </form>
+</section>
+
+<script is:inline>
+  (() => {
+    const section = document.querySelector("[data-comments]");
+    if (!section) return;
+    const endpoint = section.getAttribute("data-comments");
+    const list = section.querySelector("[data-comments-list]");
+    const empty = section.querySelector("[data-comments-empty]");
+    const form = section.querySelector("[data-comments-form]");
+    const status = section.querySelector("[data-comments-status]");
+    const date = new Intl.DateTimeFormat("en", { dateStyle: "medium" });
+
+    // A Lambda Function URL behind CloudFront OAC rejects unsigned POST
+    // payloads, so the request carries the SHA-256 of its body.
+    async function sha256Hex(text) {
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+      return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+    }
+
+    function render(comments) {
+      list.replaceChildren();
+      for (const comment of comments) {
+        const item = document.createElement("li");
+        item.className = "comment";
+        const meta = document.createElement("p");
+        meta.className = "post-meta";
+        const name = document.createElement("strong");
+        name.textContent = comment.name;
+        const time = document.createElement("time");
+        time.dateTime = comment.createdAt;
+        time.textContent = date.format(new Date(comment.createdAt));
+        meta.append(name, " · ", time);
+        item.append(meta);
+        for (const paragraph of comment.body.split("\n\n")) {
+          const p = document.createElement("p");
+          p.textContent = paragraph;
+          item.append(p);
+        }
+        list.append(item);
+      }
+      empty.hidden = comments.length > 0;
+    }
+
+    async function load() {
+      try {
+        const response = await fetch(endpoint, { credentials: "same-origin" });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!Array.isArray(data.comments)) return;
+        render(data.comments);
+        section.hidden = false;
+      } catch {
+        // Leave the section hidden.
+      }
+    }
+
+    const messages = {
+      202: "Thanks. Your comment will show up here once I've read it.",
+      429: "You've sent a few comments in the last hour. Try again later.",
+    };
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const fields = new FormData(form);
+      const body = String(fields.get("body") ?? "").trim();
+      if (body === "") {
+        status.textContent = "Write a comment first.";
+        return;
+      }
+      const payload = JSON.stringify({
+        name: String(fields.get("name") ?? ""),
+        body,
+        website: String(fields.get("website") ?? ""),
+      });
+      const button = form.querySelector("button");
+      button.disabled = true;
+      status.textContent = "Sending...";
+      try {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "content-type": "application/json",
+            "x-amz-content-sha256": await sha256Hex(payload),
+          },
+          body: payload,
+        });
+        if (response.status === 202) form.reset();
+        if (response.status === 400) {
+          const data = await response.json().catch(() => ({}));
+          status.textContent = `That didn't go through: ${data.message ?? "check the comment"}.`;
+        } else {
+          status.textContent =
+            messages[response.status] ?? "Something went wrong. Try again in a minute.";
+        }
+      } catch {
+        status.textContent = "Something went wrong. Try again in a minute.";
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    load();
+  })();
+</script>
