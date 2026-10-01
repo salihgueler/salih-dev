@@ -472,6 +472,15 @@ button:focus-visible {
   margin-top: 20px;
 }
 
+/* `.post-meta` sets display: flex, which would override the hidden attribute. */
+.article-header .reader-counts {
+  margin-top: -6px;
+}
+
+.reader-counts[hidden] {
+  display: none;
+}
+
 .article-summary {
   max-width: 760px;
   margin: 26px 0 0;

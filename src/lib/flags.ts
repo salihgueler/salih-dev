@@ -25,6 +25,9 @@
 /** The flag key this site rolls out behind. One flag covers all 16 routes. */
 export const RENDER_FLAG_KEY = "renderFromBackend";
 
+/** The flag that shows "reading now" and "read so far" on blog posts. */
+export const READER_COUNTS_FLAG_KEY = "readerCounts";
+
 /** The AppConfig Agent's fixed local HTTP port. */
 const AGENT_PORT = 2772;
 
@@ -98,16 +101,20 @@ const defaultDeps: FlagReadDeps = {
 };
 
 /**
- * Returns whether the `renderFromBackend` flag is on for this visitor.
+ * Returns whether feature flag `key` is on for this visitor.
  *
  * FAIL-SAFE: returns `false` on any error, non-200, malformed body, missing
- * config, or timeout. The caller treats `false` as the off path.
+ * config, or timeout. A flag that is not in the deployed configuration yet
+ * (the agent answers 4xx) is off too, so a new flag can ship in code before
+ * its first flag deployment.
  *
+ * @param key the flag key in the `render-flags` profile.
  * @param vid the visitor id used as the flag's evaluation context. When empty
  *   the flag is still read (the default rule applies), so a first-request
  *   visitor without a cookie yet still gets a decision.
  */
-export async function getRenderFlag(
+export async function getFlag(
+  key: string,
   vid: string,
   config: FlagConfig | null = flagConfigFromEnv(),
   deps: FlagReadDeps = defaultDeps,
@@ -119,7 +126,7 @@ export async function getRenderFlag(
     `/applications/${encodeURIComponent(config.application)}` +
     `/environments/${encodeURIComponent(config.environment)}` +
     `/configurations/${encodeURIComponent(config.profile)}` +
-    `?flag=${encodeURIComponent(RENDER_FLAG_KEY)}`;
+    `?flag=${encodeURIComponent(key)}`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), deps.timeoutMs);
@@ -134,10 +141,19 @@ export async function getRenderFlag(
     const body: unknown = await response.json();
     return isEnabled(body);
   } catch {
-    // Any failure — network error, abort/timeout, non-JSON body — is the off
+    // Any failure (network error, abort/timeout, non-JSON body) is the off
     // path. The off path is the safe, known-good behaviour.
     return false;
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Whether the `renderFromBackend` flag is on for this visitor. */
+export function getRenderFlag(
+  vid: string,
+  config: FlagConfig | null = flagConfigFromEnv(),
+  deps: FlagReadDeps = defaultDeps,
+): Promise<boolean> {
+  return getFlag(RENDER_FLAG_KEY, vid, config, deps);
 }

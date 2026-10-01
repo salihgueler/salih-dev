@@ -41,6 +41,7 @@ const delivery = new SalihDevDeliveryStack(app, "SalihDevDelivery", {
   domainName,
   env,
   hostedZone: state.hostedZone,
+  readerCountsTable: state.readerCountsTable,
   terminationProtection: true,
 });
 delivery.addStackDependency(state);
