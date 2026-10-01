@@ -15,8 +15,10 @@ import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as cloudwatch from "aws-cdk-lib/aws-cloudwatch";
 import * as actions from "aws-cdk-lib/aws-cloudwatch-actions";
 import * as codebuild from "aws-cdk-lib/aws-codebuild";
+import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
+import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as route53 from "aws-cdk-lib/aws-route53";
 import * as targets from "aws-cdk-lib/aws-route53-targets";
@@ -49,6 +51,8 @@ export interface SalihDevDeliveryStackProps extends StackProps {
   readonly contentBucket: s3.IBucket;
   readonly domainName: string;
   readonly hostedZone: route53.IHostedZone;
+  /** The reader-counts table from the state stack (reader-counts feature). */
+  readonly readerCountsTable: dynamodb.ITableV2;
 }
 
 export class SalihDevDeliveryStack extends Stack {
@@ -300,12 +304,85 @@ export class SalihDevDeliveryStack extends Stack {
       true,
     );
 
+    // --- Reader counts API (reader-counts feature) ---
+    // `POST /api/readers/<slug>` records a heartbeat and returns "reading now"
+    // and "read so far" for a blog post. It sits behind the `readerCounts` flag
+    // (it answers 404 when the flag is off for the visitor) and is reachable
+    // only through CloudFront, like the render function.
+    const readersLogGroup = new logs.LogGroup(this, "ReadersLogs", {
+      removalPolicy: RemovalPolicy.DESTROY,
+      retention: logs.RetentionDays.ONE_MONTH,
+    });
+    const readersFunction = new NodejsFunction(this, "ReadersFunction", {
+      architecture: lambda.Architecture.ARM_64,
+      bundling: { minify: true, target: "node24" },
+      depsLockFilePath: path.resolve(__dirname, "../package-lock.json"),
+      entry: path.resolve(__dirname, "../functions/readers.ts"),
+      environment: {
+        CONTENT_BUCKET_NAME: props.contentBucket.bucketName,
+        READER_COUNTS_TABLE_NAME: props.readerCountsTable.tableName,
+      },
+      logGroup: readersLogGroup,
+      memorySize: 256,
+      projectRoot: path.resolve(__dirname, "../.."),
+      runtime: lambda.Runtime.NODEJS_24_X,
+      timeout: Duration.seconds(5),
+    });
+    // The four item actions the store uses. TransactWriteItems is authorized
+    // per item as PutItem (the conditional `read#` row) and UpdateItem (the
+    // counter), so it needs no action of its own.
+    readersFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:GetItem",
+          "dynamodb:Query",
+        ],
+        resources: [props.readerCountsTable.tableArn],
+      }),
+    );
+    // HeadObject on `posts/<slug>.md` decides whether the post exists. The
+    // prefix-scoped ListBucket lets S3 answer a missing post as 404 instead of
+    // an AccessDenied the handler would report as a 500.
+    readersFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["s3:GetObject"],
+        resources: [props.contentBucket.arnForObjects("posts/*")],
+      }),
+    );
+    readersFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["s3:ListBucket"],
+        conditions: { StringLike: { "s3:prefix": ["posts/*"] } },
+        resources: [props.contentBucket.bucketArn],
+      }),
+    );
+    suppressBasicLambdaLoggingPolicy(
+      readersFunction,
+      "one-month reader-counts execution logs",
+    );
+    NagSuppressions.addResourceSuppressions(
+      readersFunction,
+      [
+        {
+          id: "AwsSolutions-IAM5",
+          appliesTo: ["Resource::<ContentBucket52D4B12C.Arn>/posts/*"],
+          reason:
+            "The readers function only checks that a blog post object exists under the code-owned posts/ prefix (HeadObject, authorized as GetObject). It never writes to the bucket.",
+        },
+      ],
+      true,
+    );
+
     // --- AppConfig feature-flag control plane (render-rollout-flag) ---
     // The application, the `production` environment with the render-error and
     // p95 alarms as monitors, and the feature-flag profile holding
     // `renderFromBackend` (default off), deployed with a linear strategy and a
     // final bake time so an alarm during rollout rolls the flag back.
     const featureFlags = new FeatureFlags(this, "FeatureFlags", {
+      readersFunction,
+      readersLogGroup,
       renderFunction,
       renderLogGroup,
     });
@@ -390,6 +467,44 @@ export class SalihDevDeliveryStack extends Stack {
         ],
       }),
     );
+
+    // The readers function reads `readerCounts` from the same profile through
+    // the same pinned extension layer, with the same scoped read grant.
+    readersFunction.addLayers(appConfigLayer);
+    readersFunction.addEnvironment(
+      "AWS_APPCONFIG_EXTENSION_PREFETCH_LIST",
+      featureFlags.configurationPath(),
+    );
+    readersFunction.addEnvironment(
+      "APPCONFIG_APPLICATION",
+      featureFlags.application.name ?? "salih-dev",
+    );
+    readersFunction.addEnvironment("APPCONFIG_ENVIRONMENT", "production");
+    readersFunction.addEnvironment(
+      "APPCONFIG_PROFILE",
+      featureFlags.configuration.name ?? "render-flags",
+    );
+    readersFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          "appconfig:StartConfigurationSession",
+          "appconfig:GetLatestConfiguration",
+        ],
+        resources: [
+          appConfigResourceArn,
+          Stack.of(this).formatArn({
+            service: "appconfig",
+            resource: "application",
+            resourceName: featureFlags.application.applicationId,
+          }),
+        ],
+      }),
+    );
+    const readersFunctionUrl = readersFunction.addFunctionUrl({
+      authType: lambda.FunctionUrlAuthType.AWS_IAM,
+    });
+    const readersOrigin =
+      origins.FunctionUrlOrigin.withOriginAccessControl(readersFunctionUrl);
 
     // The Lambda is reachable only through CloudFront: its Function URL uses
     // IAM auth and is fronted with Origin Access Control, so it is never a
@@ -483,6 +598,34 @@ export class SalihDevDeliveryStack extends Stack {
         },
       ],
       origin: renderOrigin,
+      responseHeadersPolicy: responseHeaders,
+      viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+    };
+
+    // --- Reader counts API behavior (reader-counts feature) ---
+    // Nothing is cached: every heartbeat has to reach the function. Only the
+    // `vid` cookie and the payload hash header go to the origin. A Lambda
+    // Function URL behind OAC rejects unsigned POST payloads, so the browser
+    // sends `x-amz-content-sha256` with the SHA-256 of the body.
+    const readersOriginRequestPolicy = new cloudfront.OriginRequestPolicy(
+      this,
+      "ReadersOriginRequestPolicy",
+      {
+        originRequestPolicyName: "salih-dev-readers",
+        cookieBehavior: cloudfront.OriginRequestCookieBehavior.allowList("vid"),
+        headerBehavior: cloudfront.OriginRequestHeaderBehavior.allowList(
+          "x-amz-content-sha256",
+        ),
+        queryStringBehavior:
+          cloudfront.OriginRequestQueryStringBehavior.none(),
+      },
+    );
+    const readersBehavior: cloudfront.BehaviorOptions = {
+      allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+      cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+      originRequestPolicy: readersOriginRequestPolicy,
+      compress: true,
+      origin: readersOrigin,
       responseHeadersPolicy: responseHeaders,
       viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
     };
@@ -624,6 +767,8 @@ export class SalihDevDeliveryStack extends Stack {
         // deck-id shape; the origin's OAC read is scoped to `talks/decks/*`, so
         // no other prefix of the content bucket is reachable through it.
         "/talks/slides/api/*": deckBehavior,
+        // Reader-count heartbeats for blog posts (reader-counts feature).
+        "/api/readers/*": readersBehavior,
       },
       certificate,
       defaultBehavior: {
@@ -672,6 +817,12 @@ export class SalihDevDeliveryStack extends Stack {
     // grants only InvokeFunctionUrl, and the first production deploy returned
     // 403 (served as the 404 page) on every render route until this was added.
     renderFunction.addPermission("AllowCloudFrontInvokeFunction", {
+      action: "lambda:InvokeFunction",
+      principal: new iam.ServicePrincipal("cloudfront.amazonaws.com"),
+      sourceArn: `arn:${this.partition}:cloudfront::${this.account}:distribution/${distribution.distributionId}`,
+    });
+    // Same gap for the readers Function URL.
+    readersFunction.addPermission("AllowCloudFrontInvokeFunction", {
       action: "lambda:InvokeFunction",
       principal: new iam.ServicePrincipal("cloudfront.amazonaws.com"),
       sourceArn: `arn:${this.partition}:cloudfront::${this.account}:distribution/${distribution.distributionId}`,

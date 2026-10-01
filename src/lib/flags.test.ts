@@ -12,7 +12,9 @@ import test from "node:test";
 
 import {
   flagConfigFromEnv,
+  getFlag,
   getRenderFlag,
+  READER_COUNTS_FLAG_KEY,
   RENDER_FLAG_KEY,
   type FlagConfig,
   type FlagReadDeps,
@@ -180,4 +182,28 @@ test("flagConfigFromEnv reads the three coordinates or returns null", () => {
     flagConfigFromEnv({ APPCONFIG_APPLICATION: "a" } as NodeJS.ProcessEnv),
     null,
   );
+});
+
+test("getFlag reads the named flag, not renderFromBackend", async () => {
+  let seenUrl = "";
+  const deps: FlagReadDeps = {
+    timeoutMs: 300,
+    fetch: (async (url: string) => {
+      seenUrl = url;
+      return new Response(JSON.stringify(agentBody({ enabled: true })), {
+        status: 200,
+      });
+    }) as unknown as typeof fetch,
+  };
+  assert.equal(await getFlag(READER_COUNTS_FLAG_KEY, "v1", config, deps), true);
+  assert.match(seenUrl, /\?flag=readerCounts$/);
+});
+
+test("a flag missing from the deployed configuration (agent 404) is off", async () => {
+  const deps: FlagReadDeps = {
+    timeoutMs: 300,
+    fetch: (async () =>
+      new Response("flag not found", { status: 404 })) as unknown as typeof fetch,
+  };
+  assert.equal(await getFlag(READER_COUNTS_FLAG_KEY, "v1", config, deps), false);
 });

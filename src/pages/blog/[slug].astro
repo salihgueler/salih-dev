@@ -3,6 +3,7 @@ import type { CollectionEntry } from "astro:content";
 import { render } from "astro:content";
 
 import BaseLayout from "../../layouts/BaseLayout.astro";
+import ReaderCounts from "../../components/ReaderCounts.astro";
 import {
   formatDate,
   getPostStaticPaths,
@@ -134,6 +135,7 @@ const articleStructuredData = [
           )
         }
       </p>
+      {Astro.locals.readerCounts === true && <ReaderCounts slug={post.id} />}
       <p class="article-summary">
         <strong>Summary:</strong> {post.data.aiSummary}
       </p>
