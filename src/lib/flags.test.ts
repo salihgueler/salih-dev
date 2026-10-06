@@ -16,6 +16,7 @@ import {
   getRenderFlag,
   READER_COUNTS_FLAG_KEY,
   RENDER_FLAG_KEY,
+  resetWarmFlagReadForTests,
   type FlagConfig,
   type FlagReadDeps,
 } from "./flags.ts";
@@ -151,7 +152,7 @@ test("sends the vid in the Context header and the flag query", async () => {
     }) as unknown as typeof fetch,
   };
   await getRenderFlag("abc-123", config, deps);
-  assert.match(seenUrl, /localhost:2772/);
+  assert.match(seenUrl, /^http:\/\/127\.0\.0\.1:2772\//);
   assert.match(seenUrl, new RegExp(`flag=${RENDER_FLAG_KEY}`));
   assert.equal(seenContext, "vid=abc-123");
 });
@@ -206,4 +207,53 @@ test("a flag missing from the deployed configuration (agent 404) is off", async 
       new Response("flag not found", { status: 404 })) as unknown as typeof fetch,
   };
   assert.equal(await getFlag(READER_COUNTS_FLAG_KEY, "v1", config, deps), false);
+});
+
+/**
+ * A fetch that answers `enabled: true` after `delayMs`, or rejects when the
+ * caller aborts first. Used to prove which timeout budget a read got.
+ */
+function slowAgent(delayMs: number): typeof fetch {
+  return ((_url: string, init?: { signal?: AbortSignal }) =>
+    new Promise((resolve, reject) => {
+      const t = setTimeout(
+        () =>
+          resolve(
+            new Response(JSON.stringify({ _variant: "author", enabled: true }), {
+              status: 200,
+            }),
+          ),
+        delayMs,
+      );
+      init?.signal?.addEventListener("abort", () => {
+        clearTimeout(t);
+        reject(new DOMException("aborted", "AbortError"));
+      });
+    })) as unknown as typeof fetch;
+}
+
+test("the first read on an instance gets the longer cold-start budget", async () => {
+  resetWarmFlagReadForTests();
+  const deps: FlagReadDeps = {
+    timeoutMs: 20,
+    firstReadTimeoutMs: 200,
+    fetch: slowAgent(60),
+  };
+  // 60 ms is over the warm budget but inside the first-read budget.
+  assert.equal(await getRenderFlag("v1", config, deps), true);
+  // Once warm, the same 60 ms answer is a timeout and reads as off.
+  assert.equal(await getRenderFlag("v1", config, deps), false);
+});
+
+test("a first read that times out leaves the next read cold", async () => {
+  resetWarmFlagReadForTests();
+  const deps: FlagReadDeps = {
+    timeoutMs: 20,
+    firstReadTimeoutMs: 40,
+    fetch: slowAgent(80),
+  };
+  assert.equal(await getRenderFlag("v1", config, deps), false);
+  const quick: FlagReadDeps = { ...deps, fetch: slowAgent(30) };
+  // Still cold, so 30 ms fits the 40 ms first-read budget.
+  assert.equal(await getRenderFlag("v1", config, quick), true);
 });
