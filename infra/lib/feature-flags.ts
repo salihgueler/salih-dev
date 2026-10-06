@@ -57,6 +57,10 @@ export interface FeatureFlagsProps {
   readonly readersFunction: lambda.IFunction;
   /** The readers function's log group, for the handled `store_error` outcome. */
   readonly readersLogGroup: logs.ILogGroup;
+  /** The comments API function; its failures drive a fifth monitor. */
+  readonly commentsFunction: lambda.IFunction;
+  /** The comments function's log group, for the handled `store_error` outcome. */
+  readonly commentsLogGroup: logs.ILogGroup;
 }
 
 /**
@@ -76,6 +80,9 @@ export const RENDER_FLAG_KEY = "renderFromBackend";
 
 /** The flag that shows reader counts on blog posts (reader-counts feature). */
 export const READER_COUNTS_FLAG_KEY = "readerCounts";
+
+/** The flag that shows comments on blog posts (comments feature). */
+export const COMMENTS_FLAG_KEY = "comments";
 
 /** The one environment this single-environment site deploys the flag to. */
 export const APPCONFIG_ENVIRONMENT_NAME = "production";
@@ -207,6 +214,48 @@ export class FeatureFlags extends Construct {
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
     });
 
+    // Comments API failures, the same shape as the readers alarm.
+    const commentsStoreErrors = new logs.MetricFilter(
+      this,
+      "CommentsStoreErrorFilter",
+      {
+        logGroup: props.commentsLogGroup,
+        metricNamespace: "SalihDev/Comments",
+        metricName: "StoreErrors",
+        metricValue: "1",
+        defaultValue: 0,
+        filterPattern: logs.FilterPattern.stringValue(
+          "$.outcome",
+          "=",
+          "store_error",
+        ),
+      },
+    );
+    const commentsAlarm = new cloudwatch.Alarm(this, "CommentsErrorsAlarm", {
+      alarmDescription:
+        "The comments API is failing; roll back the comments rollout.",
+      comparisonOperator:
+        cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      evaluationPeriods: 1,
+      metric: new cloudwatch.MathExpression({
+        expression: "errors + storeErrors",
+        label: "Comments failures",
+        period: Duration.minutes(1),
+        usingMetrics: {
+          errors: props.commentsFunction.metricErrors({
+            period: Duration.minutes(1),
+            statistic: cloudwatch.Stats.SUM,
+          }),
+          storeErrors: commentsStoreErrors.metric({
+            period: Duration.minutes(1),
+            statistic: cloudwatch.Stats.SUM,
+          }),
+        },
+      }),
+      threshold: 2,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
     this.environment = new appconfig.Environment(this, "Environment", {
       application: this.application,
       environmentName: APPCONFIG_ENVIRONMENT_NAME,
@@ -218,6 +267,7 @@ export class FeatureFlags extends Construct {
         appconfig.Monitor.fromCloudWatchAlarm(latencyAlarm),
         appconfig.Monitor.fromCloudWatchAlarm(failureAlarm),
         appconfig.Monitor.fromCloudWatchAlarm(readersAlarm),
+        appconfig.Monitor.fromCloudWatchAlarm(commentsAlarm),
       ],
     });
 
@@ -272,12 +322,20 @@ export class FeatureFlags extends Construct {
                 description:
                   "Show 'reading now' and 'read so far' on blog posts, and accept reader heartbeats.",
               },
+              [COMMENTS_FLAG_KEY]: {
+                name: COMMENTS_FLAG_KEY,
+                description:
+                  "Show approved comments and the comment form on blog posts, and accept submissions.",
+              },
             },
             values: {
               [RENDER_FLAG_KEY]: {
                 enabled: false,
               },
               [READER_COUNTS_FLAG_KEY]: {
+                enabled: false,
+              },
+              [COMMENTS_FLAG_KEY]: {
                 enabled: false,
               },
             },

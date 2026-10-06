@@ -15,6 +15,11 @@ export function isBlogPostHtmlPath(pathname: string): boolean {
   return BLOG_POST_HTML.test(pathname);
 }
 
+/** The comments endpoint for a post, same origin as the page. */
+export function commentsApiPath(slug: string): string {
+  return `/api/comments/${encodeURIComponent(slug)}`;
+}
+
 /** The heartbeat endpoint for a post, same origin as the page. */
 export function readersApiPath(slug: string): string {
   return `/api/readers/${encodeURIComponent(slug)}`;

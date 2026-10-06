@@ -30,6 +30,7 @@ function createStacks() {
     env,
     hostedZone: state.hostedZone,
     readerCountsTable: state.readerCountsTable,
+    commentsTable: state.commentsTable,
   });
   return {
     app,
@@ -294,9 +295,13 @@ test("exposes exactly the IAM-authorized content and talk routes with shared thr
   assert.deepEqual(
     routeProperties.map((properties) => properties.RouteKey).sort(),
     [
+      "DELETE /v1/comments/pending/{commentId}",
+      "DELETE /v1/comments/{slug}/{commentId}",
       "DELETE /v1/talks/records/{recordKey}",
+      "GET /v1/comments/pending",
       "GET /v1/content",
       "GET /v1/talks/records",
+      "POST /v1/comments/pending/{commentId}/approval",
       "POST /v1/talks/uploads",
       "POST /v1/talks/uploads/{deckId}/completion",
       "PUT /v1/content",
@@ -673,13 +678,13 @@ test("adds no extra storage, identity, or public editor surface", () => {
   delivery.resourceCountIs("AWS::IAM::AccessKey", 0);
   delivery.resourceCountIs("AWS::Cognito::UserPool", 0);
   delivery.resourceCountIs("AWS::Cognito::IdentityPool", 0);
-  // The one table is the reader-counts table (reader-counts feature).
-  state.resourceCountIs("AWS::DynamoDB::GlobalTable", 1);
+  // The reader-counts and comments tables, both in the state stack.
+  state.resourceCountIs("AWS::DynamoDB::GlobalTable", 2);
   delivery.resourceCountIs("AWS::DynamoDB::GlobalTable", 0);
-  // Two Function URLs, the render origin and the reader-counts API, and both
-  // are IAM-authed (reachable only through CloudFront via OAC), not a public
-  // editor surface.
-  delivery.resourceCountIs("AWS::Lambda::Url", 2);
+  // Three Function URLs, the render origin, the reader-counts API and the
+  // comments API, all IAM-authed (reachable only through CloudFront via OAC),
+  // not a public editor surface. Comment moderation is on the IAM content API.
+  delivery.resourceCountIs("AWS::Lambda::Url", 3);
   for (const url of Object.values(delivery.findResources("AWS::Lambda::Url"))) {
     assert.equal(url.Properties.AuthType, "AWS_IAM");
   }
@@ -987,9 +992,9 @@ test("adds privacy-first analytics and low-cost monitoring", () => {
   delivery.resourceCountIs("AWS::Athena::NamedQuery", 3);
 
   // Monitoring: analytics widget, homepage checker, five content API functions,
-  // the request-time render function, the reader-counts API, operations
-  // dashboard, and no browser canary.
-  delivery.resourceCountIs("AWS::Lambda::Function", 9);
+  // comment moderation, the request-time render function, the reader-counts
+  // and comments APIs, operations dashboard, and no browser canary.
+  delivery.resourceCountIs("AWS::Lambda::Function", 11);
   const lambdaFunctions = delivery.findResources("AWS::Lambda::Function");
   const contentAllowLists = Object.values(lambdaFunctions)
     .map(
@@ -997,7 +1002,7 @@ test("adds privacy-first analytics and low-cost monitoring", () => {
         resource.Properties.Environment?.Variables?.CONTENT_ALLOWED_CALLER_ARNS,
     )
     .filter(Boolean);
-  assert.equal(contentAllowLists.length, 5);
+  assert.equal(contentAllowLists.length, 6);
   const serializedAllowLists = JSON.stringify(contentAllowLists);
   assert.match(serializedAllowLists, /:iam::111111111111:root/);
   assert.doesNotMatch(serializedAllowLists, /salih-dev-editor/);
@@ -1008,8 +1013,9 @@ test("adds privacy-first analytics and low-cost monitoring", () => {
   // Importer and publisher build-failure alarms plus CloudFront 4xx/5xx and two
   // homepage-check alarms (6), plus the three render-rollout alarms (render
   // errors, p95 latency and handled render failures) that AppConfig watches as
-  // monitors, plus the reader-counts API alarm, the fourth monitor (10 total).
-  delivery.resourceCountIs("AWS::CloudWatch::Alarm", 10);
+  // monitors, plus the reader-counts and comments API alarms, the fourth and
+  // fifth monitors (11 total).
+  delivery.resourceCountIs("AWS::CloudWatch::Alarm", 11);
 
   // A failed publisher build must alarm: during the rollout it is what keeps
   // the baked pages behind the flag-off path and the on-path fallback current.

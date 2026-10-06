@@ -15,6 +15,7 @@
     "@aws-sdk/client-codebuild": "3.1127.0",
     "@aws-sdk/client-dynamodb": "3.1127.0",
     "@aws-sdk/client-s3": "3.1127.0",
+    "@aws-sdk/client-sns": "3.1127.0",
     "@aws-sdk/s3-presigned-post": "3.1127.0",
     "aws-cdk-lib": "2.262.1",
     "cdk-nag": "2.38.2",

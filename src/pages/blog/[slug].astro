@@ -3,6 +3,7 @@ import type { CollectionEntry } from "astro:content";
 import { render } from "astro:content";
 
 import BaseLayout from "../../layouts/BaseLayout.astro";
+import Comments from "../../components/Comments.astro";
 import ReaderCounts from "../../components/ReaderCounts.astro";
 import {
   formatDate,
@@ -201,5 +202,7 @@ const articleStructuredData = [
         ))
       }
     </ul>
+
+    {Astro.locals.comments === true && <Comments slug={post.id} />}
   </article>
 </BaseLayout>

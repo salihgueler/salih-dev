@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isBlogPostHtmlPath, readersApiPath } from "./reader-counts.ts";
+import { commentsApiPath, isBlogPostHtmlPath, readersApiPath } from "./reader-counts.ts";
 
 test("only a blog post's HTML page gets the widget", () => {
   for (const path of [
@@ -26,4 +26,8 @@ test("only a blog post's HTML page gets the widget", () => {
 
 test("the heartbeat goes to the same-origin readers API", () => {
   assert.equal(readersApiPath("my-post"), "/api/readers/my-post");
+});
+
+test("comments go to the same-origin comments API", () => {
+  assert.equal(commentsApiPath("my-post"), "/api/comments/my-post");
 });
