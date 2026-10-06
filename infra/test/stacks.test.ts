@@ -29,6 +29,7 @@ function createStacks() {
     domainName: "salih.dev",
     env,
     hostedZone: state.hostedZone,
+    readerCountsTable: state.readerCountsTable,
   });
   return {
     app,
@@ -672,12 +673,16 @@ test("adds no extra storage, identity, or public editor surface", () => {
   delivery.resourceCountIs("AWS::IAM::AccessKey", 0);
   delivery.resourceCountIs("AWS::Cognito::UserPool", 0);
   delivery.resourceCountIs("AWS::Cognito::IdentityPool", 0);
-  // The only Function URL is the render origin, and it is IAM-authed (reachable
-  // only through CloudFront via OAC), not a public editor surface.
-  delivery.resourceCountIs("AWS::Lambda::Url", 1);
-  delivery.hasResourceProperties("AWS::Lambda::Url", {
-    AuthType: "AWS_IAM",
-  });
+  // The one table is the reader-counts table (reader-counts feature).
+  state.resourceCountIs("AWS::DynamoDB::GlobalTable", 1);
+  delivery.resourceCountIs("AWS::DynamoDB::GlobalTable", 0);
+  // Two Function URLs, the render origin and the reader-counts API, and both
+  // are IAM-authed (reachable only through CloudFront via OAC), not a public
+  // editor surface.
+  delivery.resourceCountIs("AWS::Lambda::Url", 2);
+  for (const url of Object.values(delivery.findResources("AWS::Lambda::Url"))) {
+    assert.equal(url.Properties.AuthType, "AWS_IAM");
+  }
   delivery.resourceCountIs("AWS::ApiGatewayV2::DomainName", 0);
 });
 
@@ -982,8 +987,9 @@ test("adds privacy-first analytics and low-cost monitoring", () => {
   delivery.resourceCountIs("AWS::Athena::NamedQuery", 3);
 
   // Monitoring: analytics widget, homepage checker, five content API functions,
-  // the request-time render function, operations dashboard, and no browser canary.
-  delivery.resourceCountIs("AWS::Lambda::Function", 8);
+  // the request-time render function, the reader-counts API, operations
+  // dashboard, and no browser canary.
+  delivery.resourceCountIs("AWS::Lambda::Function", 9);
   const lambdaFunctions = delivery.findResources("AWS::Lambda::Function");
   const contentAllowLists = Object.values(lambdaFunctions)
     .map(
@@ -1002,8 +1008,8 @@ test("adds privacy-first analytics and low-cost monitoring", () => {
   // Importer and publisher build-failure alarms plus CloudFront 4xx/5xx and two
   // homepage-check alarms (6), plus the three render-rollout alarms (render
   // errors, p95 latency and handled render failures) that AppConfig watches as
-  // monitors (9 total).
-  delivery.resourceCountIs("AWS::CloudWatch::Alarm", 9);
+  // monitors, plus the reader-counts API alarm, the fourth monitor (10 total).
+  delivery.resourceCountIs("AWS::CloudWatch::Alarm", 10);
 
   // A failed publisher build must alarm: during the rollout it is what keeps
   // the baked pages behind the flag-off path and the on-path fallback current.

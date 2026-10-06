@@ -29,6 +29,7 @@ function deliveryTemplate(): Template {
     domainName: "salih.dev",
     env,
     hostedZone: state.hostedZone,
+    readerCountsTable: state.readerCountsTable,
   });
   return Template.fromStack(delivery);
 }
@@ -104,10 +105,11 @@ test("handled render failures drive their own alarm and AppConfig monitor", () =
     Namespace: "SalihDev/Render",
     Threshold: 1,
   });
-  // Three monitors: Lambda errors, p95 latency, handled render failures.
+  // Four monitors: render errors, render p95, handled render failures, and
+  // reader-counts API failures.
   const envs = Object.values(t.findResources("AWS::AppConfig::Environment"));
   const monitors = (envs[0].Properties as { Monitors: unknown[] }).Monitors;
-  assert.equal(monitors.length, 3);
+  assert.equal(monitors.length, 4);
 });
 
 test("the deployment strategy has a final bake time", () => {

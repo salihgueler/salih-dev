@@ -50,6 +50,13 @@ export interface FeatureFlagsProps {
    * than throwing, so they never reach the function's `Errors` metric.
    */
   readonly renderLogGroup: logs.ILogGroup;
+  /**
+   * The reader-counts API function. Its errors drive a fourth monitor, so a
+   * `readerCounts` rollout that breaks the API rolls back like a render one.
+   */
+  readonly readersFunction: lambda.IFunction;
+  /** The readers function's log group, for the handled `store_error` outcome. */
+  readonly readersLogGroup: logs.ILogGroup;
 }
 
 /**
@@ -66,6 +73,9 @@ export const RENDER_FAILURE_OUTCOMES = [
 
 /** The flag key the render Lambda reads and the rollout turns on. */
 export const RENDER_FLAG_KEY = "renderFromBackend";
+
+/** The flag that shows reader counts on blog posts (reader-counts feature). */
+export const READER_COUNTS_FLAG_KEY = "readerCounts";
 
 /** The one environment this single-environment site deploys the flag to. */
 export const APPCONFIG_ENVIRONMENT_NAME = "production";
@@ -151,6 +161,52 @@ export class FeatureFlags extends Construct {
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
     });
 
+    // Reader-counts API failures. The handler turns a DynamoDB or S3 failure
+    // into a logged `store_error` and a 500 (the widget then hides itself), so
+    // the alarm adds that count to the function's own Errors.
+    const readersStoreErrors = new logs.MetricFilter(
+      this,
+      "ReadersStoreErrorFilter",
+      {
+        logGroup: props.readersLogGroup,
+        metricNamespace: "SalihDev/Readers",
+        metricName: "StoreErrors",
+        metricValue: "1",
+        defaultValue: 0,
+        filterPattern: logs.FilterPattern.stringValue(
+          "$.outcome",
+          "=",
+          "store_error",
+        ),
+      },
+    );
+    const readersAlarm = new cloudwatch.Alarm(this, "ReadersErrorsAlarm", {
+      alarmDescription:
+        "The reader-counts API is failing; roll back the readerCounts rollout.",
+      comparisonOperator:
+        cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      evaluationPeriods: 1,
+      metric: new cloudwatch.MathExpression({
+        expression: "errors + storeErrors",
+        label: "Reader-counts failures",
+        period: Duration.minutes(1),
+        usingMetrics: {
+          errors: props.readersFunction.metricErrors({
+            period: Duration.minutes(1),
+            statistic: cloudwatch.Stats.SUM,
+          }),
+          storeErrors: readersStoreErrors.metric({
+            period: Duration.minutes(1),
+            statistic: cloudwatch.Stats.SUM,
+          }),
+        },
+      }),
+      // Two failures in a minute: one lost heartbeat is noise, the widget
+      // retries on the next beat.
+      threshold: 2,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
     this.environment = new appconfig.Environment(this, "Environment", {
       application: this.application,
       environmentName: APPCONFIG_ENVIRONMENT_NAME,
@@ -161,6 +217,7 @@ export class FeatureFlags extends Construct {
         appconfig.Monitor.fromCloudWatchAlarm(errorAlarm),
         appconfig.Monitor.fromCloudWatchAlarm(latencyAlarm),
         appconfig.Monitor.fromCloudWatchAlarm(failureAlarm),
+        appconfig.Monitor.fromCloudWatchAlarm(readersAlarm),
       ],
     });
 
@@ -210,9 +267,17 @@ export class FeatureFlags extends Construct {
                 description:
                   "Serve the dynamic routes from the render Lambda (on) or the baked static pages (off).",
               },
+              [READER_COUNTS_FLAG_KEY]: {
+                name: READER_COUNTS_FLAG_KEY,
+                description:
+                  "Show 'reading now' and 'read so far' on blog posts, and accept reader heartbeats.",
+              },
             },
             values: {
               [RENDER_FLAG_KEY]: {
+                enabled: false,
+              },
+              [READER_COUNTS_FLAG_KEY]: {
                 enabled: false,
               },
             },

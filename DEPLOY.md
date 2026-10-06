@@ -776,3 +776,89 @@ code change:
 
 A missing `site/content.v1.json` or an S3 read failure then returns an uncached
 502 again, and CloudFront serves the last good page through `stale-if-error`.
+
+## 12. Roll out reader counts with the `readerCounts` flag
+
+`readerCounts` shows "N reading now · N read so far" on blog posts. It lives in
+the same `render-flags` profile and environment as `renderFromBackend`, uses
+the same ids from section 11, and goes through the same strategy and monitors.
+Design: `.kiro/specs/reader-counts/design.md`.
+
+### Deploy the stacks with the flag off
+
+The state stack adds the `ReaderCounts` table and the delivery stack adds the
+readers Lambda, `/api/readers/*` and a fourth monitor, `ReadersErrorsAlarm`.
+Deploy the state stack first, then the delivery stack. Nothing changes for
+visitors: the deployed flag version doesn't contain `readerCounts`, the agent
+answers 404 for it, and the code reads that as off.
+
+Check the deploy:
+
+```sh
+curl -sS -o /dev/null -w '%{http_code} %header{x-render-path}\n' \
+  https://salih.dev/blog/7-tips-to-make-your-ai-agent-more-predictable-1ga4/
+BODY='{"first":true}'
+curl -sS -X POST -H 'content-type: application/json' \
+  -H "x-amz-content-sha256: $(printf '%s' "$BODY" | shasum -a 256 | cut -d' ' -f1)" \
+  -H 'cookie: vid=00000000-0000-4000-8000-000000000000' --data "$BODY" \
+  -w ' %{http_code}\n' \
+  https://salih.dev/api/readers/7-tips-to-make-your-ai-agent-more-predictable-1ga4
+```
+
+The post returns 200. The readers API returns `{"message":"not found"} 404`
+(flag off). A 403 here means CloudFront can't invoke the readers function:
+check that both `lambda:InvokeFunctionUrl` and `lambda:InvokeFunction` are on
+it.
+
+Wait until all four alarms under `SalihDevDelivery-FeatureFlags` print `OK`
+before any flag deployment.
+
+### Turn it on for one visitor
+
+The widget only appears on pages rendered on request, so the visitor needs
+`renderFromBackend` on too. Add `readerCounts` to `.cache/render-flags.json`
+next to the existing flag, with the same `author` rule, and deploy it with the
+commands from "Turn the flag on for one visitor" above:
+
+```json
+"flags": {
+  "renderFromBackend": { "name": "renderFromBackend" },
+  "readerCounts": { "name": "readerCounts" }
+},
+"values": {
+  "renderFromBackend": { "_variants": [ ... as above ... ] },
+  "readerCounts": {
+    "_variants": [
+      { "name": "author", "enabled": true, "rule": "(in $vid [\"<your-vid>\"])" },
+      { "name": "default", "enabled": false }
+    ]
+  }
+}
+```
+
+Every flag version must contain every flag. A version without
+`renderFromBackend` turns the render path off for everyone.
+
+After the deployment completes, your browser shows the counter under the post
+meta line and the API call above with your `vid` returns
+`{"readingNow":n,"readSoFar":n}`. Any other `vid` gets a post without the
+counter and a 404 from the API.
+
+### Raise the percentage and roll back
+
+Add a `split` variant to `readerCounts` as in "Raise the percentage". Raise it
+only for visitors who already get the render path, so take `renderFromBackend`
+to 100% first.
+
+`ReadersErrorsAlarm` fires on two or more failures in a minute: the readers
+Lambda's `Errors` plus handled `store_error` log lines (metric
+`SalihDev/Readers StoreErrors`). `flag_off`, `unknown_post` and `bad_request`
+404s and 400s don't count. Manual rollback is the same `stop-deployment` as in
+section 11. Turning `readerCounts` off removes the widget on the next page load
+and makes the API answer 404 immediately, so open tabs stop writing.
+
+### Limits
+
+The account's Lambda concurrency limit is 10 and every function shares it.
+Each open post tab with the counter makes one readers request every 30
+seconds. Request a quota increase before going past 10%.

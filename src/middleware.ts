@@ -17,7 +17,8 @@ import {
   FAILURE_CACHE_CONTROL,
   successCacheControl,
 } from "./lib/render-cache";
-import { getRenderFlag } from "./lib/flags";
+import { getFlag, getRenderFlag, READER_COUNTS_FLAG_KEY } from "./lib/flags";
+import { isBlogPostHtmlPath } from "./lib/reader-counts";
 import {
   RENDER_PATH_HEADER,
   RENDER_PATH_LAMBDA,
@@ -188,6 +189,13 @@ async function renderDynamic(
   // content from S3 inside the request-scoped overrides.
   const today =
     process.env.SITE_CONTENT_TODAY ?? new Date().toISOString().slice(0, 10);
+
+  // Reader counts (a second flag): only a blog post's HTML page shows them,
+  // and only request-time renders, so the baked pages never carry the widget.
+  // A failed read is off, like every flag read.
+  context.locals.readerCounts = isBlogPostHtmlPath(context.url.pathname)
+    ? await getFlag(READER_COUNTS_FLAG_KEY, vid)
+    : false;
 
   let rendered: Response;
   try {

@@ -1,0 +1,111 @@
+---
+/**
+ * "N reading now · N read so far" for a blog post.
+ *
+ * Feature: reader-counts (see .kiro/specs/reader-counts/design.md).
+ *
+ * Rendered only when the `readerCounts` flag is on for this visitor (the post
+ * page checks `Astro.locals.readerCounts`). The line starts hidden and appears
+ * after the first successful heartbeat, so a failing API never shows a broken
+ * or zero count. The script is inline because the baked static build and the
+ * request-time build emit different `/_astro/` asset hashes, and only the
+ * static build's assets are in the site bucket.
+ */
+import { readersApiPath } from "../lib/reader-counts";
+
+interface Props {
+  slug: string;
+}
+
+const { slug } = Astro.props;
+---
+
+<p
+  class="post-meta reader-counts"
+  data-reader-counts={readersApiPath(slug)}
+  hidden
+>
+  <span data-reading-now></span>
+  <span aria-hidden="true">·</span>
+  <span data-read-so-far></span>
+</p>
+
+<script is:inline>
+  (() => {
+    const el = document.querySelector("[data-reader-counts]");
+    if (!el) return;
+    const endpoint = el.getAttribute("data-reader-counts");
+    const readingNow = el.querySelector("[data-reading-now]");
+    const readSoFar = el.querySelector("[data-read-so-far]");
+    const INTERVAL_MS = 30000;
+    const number = new Intl.NumberFormat("en");
+    let first = true;
+    let timer = null;
+    let failures = 0;
+
+    // A Lambda Function URL behind CloudFront OAC rejects unsigned POST
+    // payloads, so the request carries the SHA-256 of its body.
+    async function sha256Hex(text) {
+      const digest = await crypto.subtle.digest(
+        "SHA-256",
+        new TextEncoder().encode(text),
+      );
+      return Array.from(new Uint8Array(digest), (b) =>
+        b.toString(16).padStart(2, "0"),
+      ).join("");
+    }
+
+    async function beat() {
+      const body = JSON.stringify(first ? { first: true } : {});
+      try {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "content-type": "application/json",
+            "x-amz-content-sha256": await sha256Hex(body),
+          },
+          body,
+        });
+        if (!response.ok) throw new Error(String(response.status));
+        const counts = await response.json();
+        if (
+          typeof counts.readingNow !== "number" ||
+          typeof counts.readSoFar !== "number"
+        ) {
+          throw new Error("bad body");
+        }
+        first = false;
+        failures = 0;
+        readingNow.textContent = `${number.format(counts.readingNow)} reading now`;
+        readSoFar.textContent = `${number.format(counts.readSoFar)} read so far`;
+        el.hidden = false;
+      } catch {
+        // Hide the line and stop after three failures in a row, so a broken
+        // API costs the reader nothing and stops sending requests.
+        failures += 1;
+        el.hidden = true;
+        if (failures >= 3) stop();
+      }
+    }
+
+    function start() {
+      if (timer !== null) return;
+      beat();
+      timer = setInterval(beat, INTERVAL_MS);
+    }
+
+    function stop() {
+      if (timer === null) return;
+      clearInterval(timer);
+      timer = null;
+    }
+
+    // Only a visible tab counts as reading.
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && failures < 3) start();
+      else stop();
+    });
+    if (document.visibilityState === "visible") start();
+  })();
+</script>
