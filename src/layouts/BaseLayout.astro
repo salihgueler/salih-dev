@@ -1,6 +1,7 @@
 ---
 import Footer from "../components/Footer.astro";
 import Header from "../components/Header.astro";
+import WebMcpTools from "../components/WebMcpTools.astro";
 import { site } from "../config/site";
 import { canonicalUrl, markdownAlternatePath } from "../lib/discovery";
 import "../styles/global.css";
@@ -139,5 +140,6 @@ const allStructuredData = [...baseStructuredData, ...extraStructuredData];
       </main>
       <Footer />
     </div>
+    <WebMcpTools />
   </body>
 </html>

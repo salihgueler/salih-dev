@@ -1,0 +1,17 @@
+---
+/**
+ * WebMCP tools for in-browser agents.
+ *
+ * Feature: webmcp
+ *
+ * Renders no markup. Its script registers the site's read-only WebMCP tools
+ * when the browser supports `document.modelContext`, and does nothing
+ * otherwise. See `src/lib/webmcp/register-tools.ts`.
+ */
+---
+
+<script>
+  import { registerWebMcpTools } from "../lib/webmcp/register-tools";
+
+  void registerWebMcpTools();
+</script>

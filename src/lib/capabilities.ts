@@ -79,9 +79,9 @@ export const capabilities: Capability[] = [
   {
     id: "webmcp",
     category: "protocol-discovery",
-    status: "unavailable",
+    status: "available",
     endpoint: "/.well-known/webmcp.json",
-    note: "The site exposes no browser actions.",
+    note: "Pages register read-only WebMCP tools for posts, talks, and events.",
   },
   {
     id: "api-catalog",
