@@ -373,8 +373,14 @@ button:focus-visible {
   text-align: center;
 }
 
-.site-footer a {
+.site-footer a,
+.site-footer .footer-links {
   justify-self: end;
+}
+
+.site-footer .footer-links {
+  display: flex;
+  gap: 16px;
 }
 
 .page-intro {
@@ -1167,7 +1173,8 @@ button:focus-visible {
     text-align: left;
   }
 
-  .site-footer a {
+  .site-footer a,
+  .site-footer .footer-links {
     align-self: flex-start;
   }
 
