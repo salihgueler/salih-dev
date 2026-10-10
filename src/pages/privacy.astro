@@ -1,0 +1,166 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { site } from "../config/site";
+
+/*
+ * DRAFT. Do not deploy until the two placeholders below are filled in and the
+ * page has been reviewed by someone who knows German data protection law.
+ * {{POSTAL_ADDRESS}} and {{EMAIL}} are rendered as-is on purpose, so a build
+ * with them still in place is easy to spot.
+ */
+const updated = "October 10, 2026";
+---
+
+<BaseLayout
+  title="Privacy"
+  description={`What ${site.name}'s website stores about visitors, for how long, and how to have it deleted.`}
+>
+  <article class="prose-page">
+    <h1>Privacy</h1>
+    <div class="prose-page-content">
+      <p>
+        This page explains what this website stores about you when you read it
+        or leave a comment, why, and for how long. Last updated {updated}.
+      </p>
+
+      <h2 id="controller">Who is responsible</h2>
+      <p>
+        {site.name}<br />
+        {"{{POSTAL_ADDRESS}}"}<br />
+        Email: {"{{EMAIL}}"}
+      </p>
+      <p>
+        This is a personal website. There are no ads, no analytics tools and
+        no tracking across other websites.
+      </p>
+
+      <h2 id="hosting">Hosting and access logs</h2>
+      <p>
+        The site runs on Amazon Web Services (Amazon CloudFront, AWS Lambda,
+        Amazon S3 and Amazon DynamoDB). To deliver a page, AWS has to process
+        your IP address and the request your browser sends. AWS processes this
+        data for me as a processor under a data processing agreement. The
+        servers are in the United States. AWS is certified under the EU-U.S.
+        Data Privacy Framework, and its data processing agreement includes the
+        EU standard contractual clauses.
+      </p>
+      <p>
+        For each request I keep an access log entry with the date and time, the
+        page address, the response status and size, how long the response
+        took, the AWS edge location that served it, and the country your
+        request came from. Your IP address is not written to these logs. They
+        are deleted after 90 days. I use them to see which pages are read and
+        to find errors.
+      </p>
+      <p>
+        The functions behind the site also write technical logs, for example
+        whether a comment was accepted or rejected and for which post. They
+        contain no IP address and no cookie value, and they are deleted after
+        one month.
+      </p>
+      <p>
+        The legal basis is my legitimate interest in running the site securely
+        and knowing whether it works (Art. 6(1)(f) GDPR).
+      </p>
+
+      <h2 id="cookie">The vid cookie</h2>
+      <p>
+        On your first visit the site sets one cookie, called <code>vid</code>.
+        It holds a random ID that is not derived from your IP address or
+        anything else about you. It is only sent to this site, cannot be read
+        by scripts on the page, and expires after one year.
+      </p>
+      <p>
+        I use it for two things. When I try out a new feature, I turn it on for
+        some visitors before everyone, and the cookie keeps you on the same
+        version of the site from one page to the next. It also makes sure the
+        reader count described below counts you once per post, however often you reload.
+      </p>
+      <p>
+        The cookie is required to show you one consistent version of the site
+        (§ 25(2) no. 2 TDDDG, Art. 6(1)(f) GDPR). You can delete it in your
+        browser at any time. You then get a new random ID on your next visit.
+      </p>
+
+      <h2 id="reader-counts">Reader counts</h2>
+      <p>
+        Some blog posts show how many people are reading them right now and how
+        many have read them so far. For this I store a one-way hash of your
+        cookie ID combined with the post's address. Your cookie ID itself is
+        never stored, and you get a different hash on every post, so the
+        entries for different posts cannot be linked to each other.
+      </p>
+      <p>
+        While a post is open, your browser tells the site every 30 seconds that
+        you are still reading. That entry expires 75 seconds after the last
+        signal. The entry that counts you as having read a post is kept for one
+        year, the same lifetime as the cookie.
+      </p>
+
+      <h2 id="comments">Comments</h2>
+      <p>
+        If you leave a comment, I store the name you enter (optional, shown as
+        "Anonymous" if you leave it empty), your comment, the post it belongs
+        to and the time you sent it. Please don't put anything in the name
+        field you don't want to see in public.
+      </p>
+      <p>
+        Every comment waits for me to read it before it appears. When a comment
+        arrives I get an email with the name and the comment text, sent through
+        Amazon Simple Notification Service. If I approve it, the name, the
+        comment and the date are shown publicly under the post. If I don't
+        approve it within 30 days, it is deleted.
+      </p>
+      <p>
+        To stop spam, the site allows at most three comments per visitor per
+        hour. For this it stores a one-way hash of your cookie ID with each
+        waiting comment and in a counter that is deleted after two hours. The
+        hash is removed from a comment when I approve it. Your IP address is
+        not stored.
+      </p>
+      <p>
+        The legal basis is your consent when you send the comment (Art. 6(1)(a)
+        GDPR). You can withdraw it at any time. To have a comment removed, email
+        me at {"{{EMAIL}}"} with the post, the name you used, and roughly when
+        you sent it, so I can find it. I don't keep anything that proves who
+        wrote a comment, so I can't tell you which comments are yours, and I
+        may ask you to quote the text.
+      </p>
+
+      <h2 id="third-parties">Content from other websites</h2>
+      <p>
+        Some pages load files from other websites. When that happens your
+        browser connects to them directly, and they receive your IP address
+        and your browser's request.
+      </p>
+      <ul>
+        <li>
+          The map on the homepage is loaded from Wikimedia Commons
+          (upload.wikimedia.org), run by the Wikimedia Foundation in the United
+          States.
+        </li>
+        <li>
+          Images in some older blog posts are loaded from where those posts
+          were first published: Medium, DEV Community and Giphy.
+        </li>
+      </ul>
+      <p>
+        Talk videos are not loaded until you press play. Only then does your
+        browser connect to the video provider, for YouTube through
+        youtube-nocookie.com.
+      </p>
+
+      <h2 id="rights">Your rights</h2>
+      <p>
+        You can ask me what data I hold about you, and have it corrected,
+        deleted or restricted. You can object to processing based on my
+        legitimate interest, ask for your data in a portable format, and
+        withdraw a consent you gave. Email me at {"{{EMAIL}}"}.
+      </p>
+      <p>
+        You can also complain to a data protection authority. Mine is the
+        Berliner Beauftragte für Datenschutz und Informationsfreiheit.
+      </p>
+    </div>
+  </article>
+</BaseLayout>
