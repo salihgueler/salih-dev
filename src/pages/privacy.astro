@@ -3,10 +3,10 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import { site } from "../config/site";
 
 /*
- * DRAFT. Do not deploy until the two placeholders below are filled in and the
- * page has been reviewed by someone who knows German data protection law.
- * {{POSTAL_ADDRESS}} and {{EMAIL}} are rendered as-is on purpose, so a build
- * with them still in place is easy to spot.
+ * DRAFT. Do not deploy until the placeholder below is filled in and the page
+ * has been reviewed by someone who knows German data protection law.
+ * {{POSTAL_ADDRESS}} is rendered as-is on purpose, so a build with it still in
+ * place is easy to spot.
  */
 const updated = "October 10, 2026";
 ---
@@ -27,7 +27,7 @@ const updated = "October 10, 2026";
       <p>
         {site.name}<br />
         {"{{POSTAL_ADDRESS}}"}<br />
-        Email: {"{{EMAIL}}"}
+        Email: <a href="mailto:salih@mail.grokbot.com">salih@mail.grokbot.com</a>
       </p>
       <p>
         This is a personal website. There are no ads, no analytics tools and
@@ -121,7 +121,7 @@ const updated = "October 10, 2026";
       <p>
         The legal basis is your consent when you send the comment (Art. 6(1)(a)
         GDPR). You can withdraw it at any time. To have a comment removed, email
-        me at {"{{EMAIL}}"} with the post, the name you used, and roughly when
+        me at <a href="mailto:salih@mail.grokbot.com">salih@mail.grokbot.com</a> with the post, the name you used, and roughly when
         you sent it, so I can find it. I don't keep anything that proves who
         wrote a comment, so I can't tell you which comments are yours, and I
         may ask you to quote the text.
@@ -155,7 +155,7 @@ const updated = "October 10, 2026";
         You can ask me what data I hold about you, and have it corrected,
         deleted or restricted. You can object to processing based on my
         legitimate interest, ask for your data in a portable format, and
-        withdraw a consent you gave. Email me at {"{{EMAIL}}"}.
+        withdraw a consent you gave. Email me at <a href="mailto:salih@mail.grokbot.com">salih@mail.grokbot.com</a>.
       </p>
       <p>
         You can also complain to a data protection authority. Mine is the
