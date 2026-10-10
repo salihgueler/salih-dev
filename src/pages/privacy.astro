@@ -3,10 +3,9 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import { site } from "../config/site";
 
 /*
- * DRAFT. Do not deploy until the placeholder below is filled in and the page
- * has been reviewed by someone who knows German data protection law.
- * {{POSTAL_ADDRESS}} is rendered as-is on purpose, so a build with it still in
- * place is easy to spot.
+ * DRAFT. Do not deploy until the page has been reviewed by someone who knows
+ * German data protection law. The controller is named with an email address
+ * only, no postal address, by choice.
  */
 const updated = "October 10, 2026";
 ---
@@ -26,7 +25,6 @@ const updated = "October 10, 2026";
       <h2 id="controller">Who is responsible</h2>
       <p>
         {site.name}<br />
-        {"{{POSTAL_ADDRESS}}"}<br />
         Email: <a href="mailto:salih@mail.grokbot.com">salih@mail.grokbot.com</a>
       </p>
       <p>
