@@ -175,7 +175,7 @@ The site serves several `.well-known` endpoints that agents can check:
 
 - **`/.well-known/agent-readiness.json`** — A manifest listing the site's policy (search: yes, AI input: yes, training: no), available representations (HTML, markdown, `llms.txt`, `llms-full.txt`), and a full capability inventory with status for each.
 - **`/.well-known/skills/index.json`** — Declares a read-only skill that tells agents how to access markdown content on the site.
-- **`/.well-known/webmcp.json`** — Responds honestly that no browser tools or transactional actions are available (important: agents check this and knowing the answer is "nothing" prevents unnecessary probing).
+- **`/.well-known/webmcp.json`**: When I first published this post, it said no browser tools were available. In October 2026 I added WebMCP, so it now lists the read-only tools every page registers in a supporting browser (site search, blog posts, talks and events). The site still has no transactional actions.
 - **`/api/catalog.json`** — A catalog of all available documents and protocol endpoints.
 - **`/api/openapi.json`** — An OpenAPI spec describing the site's API surface.
 
