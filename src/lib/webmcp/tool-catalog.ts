@@ -24,5 +24,6 @@ export const WEBMCP_TOOLS: readonly WebMcpToolSummary[] = [
   { name: "read_blog_post", title: "Read a blog post", pages: "all", readOnly: true },
   { name: "list_talks", title: "List past talks", pages: "all", readOnly: true },
   { name: "list_events", title: "List speaking events", pages: "all", readOnly: true },
+  { name: "get_speaker_kit", title: "Speaker kit", pages: "all", readOnly: true },
   { name: "show_talks_on_page", title: "Filter the Talks page", pages: "/talks/", readOnly: false },
 ];

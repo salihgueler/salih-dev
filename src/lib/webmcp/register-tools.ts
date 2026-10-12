@@ -23,6 +23,7 @@ import {
   normalize,
   searchSite,
   siteOverview,
+  speakerKit,
   type ContentType,
 } from "./queries";
 import type { SiteIndex } from "./site-index";
@@ -258,6 +259,16 @@ async function registerContentTools(context: WebMCP.ModelContext): Promise<void>
       );
       return { today: today(), count: events.length, events };
     },
+  });
+
+  await context.registerTool({
+    name: "get_speaker_kit",
+    title: "Speaker kit",
+    description:
+      "Get what an event organizer needs to invite Salih Güler as a speaker: his role and bio, focus areas, the topics he has spoken on with talk counts, his most recent talks with slide and recording URLs, the events he is already booked for, and how to contact him. Use this when someone wants to invite him, check his availability, or write a speaker introduction.",
+    inputSchema: { type: "object", properties: {} },
+    annotations: readOnly,
+    execute: async (_input, { signal }) => speakerKit(await loadIndex(signal), today()),
   });
 }
 

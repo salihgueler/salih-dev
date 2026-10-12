@@ -1,6 +1,7 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { site } from "../config/site";
+import { AGENT_GUIDE } from "../lib/webmcp/visitor-guide";
 ---
 
 <BaseLayout
@@ -18,6 +19,19 @@ import { site } from "../config/site";
       <p>
         This site is where I collect writing, talks, and practical notes from
         that work.
+      </p>
+      <h2>{AGENT_GUIDE.heading}</h2>
+      <p>{AGENT_GUIDE.intro}</p>
+      <p>{AGENT_GUIDE.promptsLead}</p>
+      <ul>
+        {AGENT_GUIDE.prompts.map((prompt) => <li>{prompt}</li>)}
+      </ul>
+      <p>
+        WebMCP is still experimental. In Chrome, turn on
+        <code>{AGENT_GUIDE.flag}</code>, reload a page here, and run
+        <code>{AGENT_GUIDE.consoleCall}</code> in the DevTools console to see
+        the tools. The full list is in
+        <a href={AGENT_GUIDE.toolListPath}>webmcp.json</a>.
       </p>
     </div>
   </article>

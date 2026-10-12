@@ -11,7 +11,7 @@ export const GET: APIRoute = () =>
     registration: "document.modelContext.registerTool",
     specification: "https://webmachinelearning.github.io/webmcp/",
     note:
-      "Every page registers read-only tools for Salih Güler's blog posts, talks, and speaking events when the browser supports WebMCP. Input schemas are available from document.modelContext. No tool sends data anywhere or changes anything outside the open page.",
+      "Every page registers read-only tools for Salih Güler's blog posts, talks, speaking events, and speaker kit when the browser supports WebMCP. Input schemas are available from document.modelContext. No tool sends data anywhere or changes anything outside the open page.",
     tools: WEBMCP_TOOLS,
     data: "https://salih.dev/api/webmcp-index.json",
     catalog: "https://salih.dev/api/catalog.json",

@@ -360,3 +360,86 @@ export function siteOverview(index: SiteIndex, today: string): SiteOverview {
     },
   };
 }
+
+export const SPEAKER_KIT_TALKS = 5;
+export const SPEAKER_KIT_EVENTS = 5;
+
+export type SpeakerKitTalk = Pick<
+  IndexedTalk,
+  "title" | "eventName" | "date" | "location" | "slidesUrl" | "videoUrl" | "sourceCodeUrl"
+>;
+
+export type SpeakerKit = Readonly<{
+  name: string;
+  role: string;
+  bio: string;
+  longBio: readonly string[];
+  focusAreas: readonly string[];
+  currentLocation: SiteIndex["site"]["currentLocation"];
+  speaking: Readonly<{
+    talkCount: number;
+    recordedTalkCount: number;
+    topics: readonly Readonly<{ topic: string; talks: number }>[];
+    eventTypes: readonly string[];
+  }>;
+  recentTalks: readonly SpeakerKitTalk[];
+  upcomingEvents: readonly EventResult[];
+  aboutUrl: string;
+  contactUrl: string;
+  profiles: SiteIndex["speaker"]["profiles"];
+  howToInvite: string;
+}>;
+
+/**
+ * Everything an event organizer asks for before inviting Salih: the bio, the
+ * topics he has spoken on (most talks first), recent talks with slides and
+ * recordings, where he is already booked, and how to get in touch.
+ */
+export function speakerKit(index: SiteIndex, today: string): SpeakerKit {
+  const topicCounts = new Map<string, { topic: string; talks: number; order: number }>();
+  for (const talk of index.talks) {
+    for (const topic of talk.topics) {
+      const key = normalize(topic);
+      if (key.length === 0) continue;
+      const entry = topicCounts.get(key);
+      if (entry) entry.talks += 1;
+      else topicCounts.set(key, { topic, talks: 1, order: topicCounts.size });
+    }
+  }
+
+  return {
+    name: index.site.name,
+    role: index.speaker.role,
+    bio: index.speaker.bio,
+    longBio: index.speaker.longBio,
+    focusAreas: index.speaker.focusAreas,
+    currentLocation: index.site.currentLocation,
+    speaking: {
+      talkCount: index.talks.length,
+      recordedTalkCount: index.talks.filter((talk) => talk.videoUrl !== null).length,
+      topics: [...topicCounts.values()]
+        .sort((left, right) => right.talks - left.talks || left.order - right.order)
+        .map(({ topic, talks }) => ({ topic, talks })),
+      eventTypes: distinct(index.talks.flatMap((talk) => talk.eventTypes)),
+    },
+    recentTalks: index.talks.slice(0, SPEAKER_KIT_TALKS).map((talk) => ({
+      title: talk.title,
+      eventName: talk.eventName,
+      date: talk.date,
+      location: talk.location,
+      slidesUrl: talk.slidesUrl,
+      videoUrl: talk.videoUrl,
+      sourceCodeUrl: talk.sourceCodeUrl,
+    })),
+    upcomingEvents: listEvents(
+      index,
+      { when: "upcoming", limit: SPEAKER_KIT_EVENTS },
+      today,
+    ),
+    aboutUrl: index.speaker.aboutUrl,
+    contactUrl: index.speaker.contactUrl,
+    profiles: index.speaker.profiles,
+    howToInvite:
+      "The site lists no email address. Send speaking invitations through one of the profiles on the contact page.",
+  };
+}

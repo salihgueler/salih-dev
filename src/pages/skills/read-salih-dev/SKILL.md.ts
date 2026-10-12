@@ -22,6 +22,22 @@ conference notes, or published technical ideas.
    complete post body.
 5. Respect the site's content signal: search and AI-assisted answers are
    allowed, while model-training reuse is declined.
+
+## In a browser with WebMCP
+
+Every page registers read-only WebMCP tools on \`document.modelContext\`.
+When you run inside a browser that supports WebMCP, prefer them over reading
+the page:
+
+- \`get_site_overview\`: call it first to learn the accepted filter values.
+- \`search_site\`, \`list_blog_posts\`, \`read_blog_post\`: find and read posts.
+- \`list_talks\`, \`list_events\`: past talks with slides and recordings, and
+  upcoming events.
+- \`get_speaker_kit\`: bio, topics, recent talks, bookings, and contact routes
+  for event organizers.
+
+The full list is at https://salih.dev/.well-known/webmcp.json. Without a
+browser, https://salih.dev/api/webmcp-index.json holds the same data.
 `;
 
 export const GET: APIRoute = () =>

@@ -11,8 +11,9 @@ export const GET: APIRoute = () =>
     available: false,
     transports: [],
     reason:
-      "No MCP server is operated. Public content is available through HTML, Markdown negotiation, RSS, and llms.txt.",
+      "No MCP server is operated. Pages register read-only WebMCP tools in the browser instead (see webmcp.json), and public content is available through HTML, Markdown negotiation, RSS, and llms.txt.",
     alternatives: [
+      "https://salih.dev/.well-known/webmcp.json",
       "https://salih.dev/index.md",
       "https://salih.dev/llms.txt",
       "https://salih.dev/api/catalog.json",
