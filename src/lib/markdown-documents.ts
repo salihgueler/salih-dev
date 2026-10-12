@@ -8,6 +8,7 @@ import {
 } from "./content";
 import { getPublishedTalksSnapshot } from "./talks/gateway-astro";
 import { serializeTalksMarkdown } from "./talks/markdown";
+import { AGENT_GUIDE } from "./webmcp/visitor-guide";
 
 /** A published blog post as the Markdown serializer consumes it. */
 type BlogPost = PublishedPost;
@@ -114,6 +115,16 @@ function aboutDocument(): string {
     "## Areas of focus",
     "",
     ...site.focusAreas.map((area) => `- ${area}`),
+    "",
+    `## ${AGENT_GUIDE.heading}`,
+    "",
+    AGENT_GUIDE.intro,
+    "",
+    AGENT_GUIDE.promptsLead,
+    "",
+    ...AGENT_GUIDE.prompts.map((prompt) => `- ${prompt}`),
+    "",
+    `WebMCP is still experimental. In Chrome, turn on \`${AGENT_GUIDE.flag}\`, reload a page here, and run \`${AGENT_GUIDE.consoleCall}\` in the DevTools console to see the tools. The full list is in [webmcp.json](${new URL(AGENT_GUIDE.toolListPath, site.url)}).`,
     "",
   ].join("\n");
 }

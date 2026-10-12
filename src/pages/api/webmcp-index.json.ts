@@ -23,6 +23,13 @@ export const GET: APIRoute = async () => {
     buildSiteIndex({
       siteName: site.name,
       siteUrl: site.url,
+      speaker: {
+        role: site.role,
+        bioShort: site.bio.short,
+        bioLong: site.bio.long,
+        focusAreas: site.focusAreas,
+        socials: site.socials,
+      },
       posts,
       talkCards: projectTalkArchive(talks).cards,
       siteContent: getSiteContent(),

@@ -20,7 +20,7 @@ import type { SiteContent, SiteEvent } from "../../config/site-content-schema";
 import type { BlogPostData } from "../blog/schema";
 import type { TalkCardView } from "../talks/projection";
 
-export const SITE_INDEX_VERSION = 1;
+export const SITE_INDEX_VERSION = 2;
 
 export type IndexedPost = Readonly<{
   slug: string;
@@ -61,6 +61,17 @@ export type IndexedEvent = Readonly<{
   status: "upcoming" | "past" | null;
 }>;
 
+/** The static profile facts an event organizer needs, from the site config. */
+export type IndexedSpeaker = Readonly<{
+  role: string;
+  bio: string;
+  longBio: readonly string[];
+  focusAreas: readonly string[];
+  aboutUrl: string;
+  contactUrl: string;
+  profiles: readonly Readonly<{ label: string; url: string }>[];
+}>;
+
 export type SiteIndex = Readonly<{
   version: typeof SITE_INDEX_VERSION;
   site: Readonly<{
@@ -68,6 +79,7 @@ export type SiteIndex = Readonly<{
     url: string;
     currentLocation: Readonly<{ city: string; country: string; updatedOn: string }>;
   }>;
+  speaker: IndexedSpeaker;
   posts: readonly IndexedPost[];
   talks: readonly IndexedTalk[];
   events: readonly IndexedEvent[];
@@ -76,9 +88,19 @@ export type SiteIndex = Readonly<{
 /** One published post as the index builder needs it. */
 export type SiteIndexPostInput = Readonly<{ id: string; data: BlogPostData }>;
 
+/** The speaker profile as the site config holds it. */
+export type SiteIndexSpeakerInput = Readonly<{
+  role: string;
+  bioShort: string;
+  bioLong: readonly string[];
+  focusAreas: readonly string[];
+  socials: readonly Readonly<{ label: string; href: string }>[];
+}>;
+
 export type SiteIndexInput = Readonly<{
   siteName: string;
   siteUrl: string;
+  speaker: SiteIndexSpeakerInput;
   posts: readonly SiteIndexPostInput[];
   talkCards: readonly TalkCardView[];
   siteContent: SiteContent;
@@ -99,6 +121,18 @@ export function buildSiteIndex(input: SiteIndexInput): SiteIndex {
         country: input.siteContent.location.country,
         updatedOn: input.siteContent.location.updatedOn,
       },
+    },
+    speaker: {
+      role: input.speaker.role,
+      bio: input.speaker.bioShort,
+      longBio: [...input.speaker.bioLong],
+      focusAreas: [...input.speaker.focusAreas],
+      aboutUrl: absolute("/about/"),
+      contactUrl: absolute("/contact/"),
+      profiles: input.speaker.socials.map((social) => ({
+        label: social.label,
+        url: social.href,
+      })),
     },
     posts: input.posts.map((post) => ({
       slug: post.id,

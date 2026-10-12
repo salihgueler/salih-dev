@@ -11,6 +11,7 @@ import {
   listTalks,
   searchSite,
   siteOverview,
+  speakerKit,
 } from "./queries.ts";
 import type { IndexedEvent, IndexedPost, IndexedTalk, SiteIndex } from "./site-index.ts";
 import { WEBMCP_TOOLS } from "./tool-catalog.ts";
@@ -64,11 +65,20 @@ function event(id: string, startsOn: string, endsOn: string, overrides: Partial<
 }
 
 const index: SiteIndex = {
-  version: 1,
+  version: 2,
   site: {
     name: "Salih Güler",
     url: "https://salih.dev/",
     currentLocation: { city: "Berlin", country: "Germany", updatedOn: "2026-09-15" },
+  },
+  speaker: {
+    role: "Senior Developer Advocate at AWS",
+    bio: "Short bio.",
+    longBio: ["Long bio."],
+    focusAreas: ["Developer experience"],
+    aboutUrl: "https://salih.dev/about/",
+    contactUrl: "https://salih.dev/contact/",
+    profiles: [{ label: "GitHub", url: "https://github.com/salihgueler" }],
   },
   posts: [
     post("amplify-flutter-auth", {
@@ -207,6 +217,35 @@ test("the overview reports counts, the next event, and the accepted filter value
   assert.deepEqual(overview.filters.postTags, ["Flutter", "AWS Amplify", "Agents"]);
   assert.deepEqual(overview.filters.talkTopics, ["Agents", "TypeScript", "Flutter"]);
   assert.deepEqual(overview.filters.talkEventTypes, ["Conference", "Meetup"]);
+});
+
+test("the speaker kit ranks topics by talk count and lists bookings and contact routes", () => {
+  const withRepeat: SiteIndex = {
+    ...index,
+    talks: [
+      ...index.talks,
+      talk("agents-again", { title: "Agents again", date: "2025-01-01", topics: ["agents"] }),
+    ],
+  };
+  const kit = speakerKit(withRepeat, TODAY);
+  assert.equal(kit.name, "Salih Güler");
+  assert.equal(kit.role, "Senior Developer Advocate at AWS");
+  assert.deepEqual(kit.speaking.topics, [
+    { topic: "Agents", talks: 2 },
+    { topic: "TypeScript", talks: 1 },
+    { topic: "Flutter", talks: 1 },
+  ]);
+  assert.equal(kit.speaking.talkCount, 3);
+  assert.equal(kit.speaking.recordedTalkCount, 1);
+  assert.deepEqual(kit.speaking.eventTypes, ["Conference", "Meetup"]);
+  assert.deepEqual(kit.recentTalks.map((t) => t.title), [
+    "Building a multi-agent D&D game",
+    "Flutter games with Flame",
+    "Agents again",
+  ]);
+  assert.deepEqual(kit.upcomingEvents.map((e) => e.id), ["running-now", "soon", "later"]);
+  assert.equal(kit.contactUrl, "https://salih.dev/contact/");
+  assert.equal(kit.profiles[0]?.label, "GitHub");
 });
 
 test("the discovery catalog lists exactly the tools the page registers", async () => {

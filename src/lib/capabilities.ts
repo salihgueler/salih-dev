@@ -81,7 +81,7 @@ export const capabilities: Capability[] = [
     category: "protocol-discovery",
     status: "available",
     endpoint: "/.well-known/webmcp.json",
-    note: "Pages register read-only WebMCP tools for posts, talks, and events.",
+    note: "Pages register read-only WebMCP tools for posts, talks, events, and a speaker kit.",
   },
   {
     id: "api-catalog",

@@ -5,6 +5,7 @@ import { getPublishedPosts, postUrl } from "../lib/content";
 import { contentSignal } from "../lib/discovery";
 import { PRERENDER_DYNAMIC_ROUTE } from "../lib/dynamic-route";
 import { getPublishedTalksSnapshot } from "../lib/talks/gateway-astro";
+import { WEBMCP_TOOLS } from "../lib/webmcp/tool-catalog";
 
 export const prerender = PRERENDER_DYNAMIC_ROUTE;
 
@@ -24,12 +25,26 @@ export const GET: APIRoute = async () => {
     "## Core pages",
     "",
     `- [Home](${site.url}/): Profile, current location, conferences, and latest posts`,
-    `- [About](${site.url}/about/): Biography and areas of work`,
+    `- [About](${site.url}/about/): Biography, areas of work, and how to use this site with an AI agent`,
     `- [Blog](${site.url}/blog/): Complete post index`,
     // Exactly one canonical Talks URL, described from the published snapshot.
     `- [Talks](${site.url}/talks/): ${talksDescription(talks.length)}`,
     `- [Full corpus](${site.url}/llms-full.txt): Combined public Markdown content`,
     `- [API catalog](${site.url}/api/catalog.json): Discovery and capability status`,
+    "",
+    "## WebMCP tools",
+    "",
+    "In a browser that supports WebMCP, every page registers these read-only",
+    "tools on `document.modelContext`. Call `get_site_overview` first to learn",
+    "the accepted filter values.",
+    "",
+    ...WEBMCP_TOOLS.map(
+      (tool) =>
+        `- \`${tool.name}\`: ${tool.title}${tool.pages === "all" ? "" : ` (only on ${tool.pages})`}`,
+    ),
+    "",
+    `Tool list: ${site.url}/.well-known/webmcp.json`,
+    `The same data without a browser: ${site.url}/api/webmcp-index.json`,
     "",
     "## Posts",
     "",
