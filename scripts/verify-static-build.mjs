@@ -16,6 +16,7 @@ const requiredFiles = [
   "llms-full.txt",
   "api/catalog.json",
   "api/openapi.json",
+  "api/webmcp-index.json",
   ".well-known/agent-readiness.json",
   ".well-known/mcp/server-card.json",
   ".well-known/skills/index.json",

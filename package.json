@@ -35,6 +35,7 @@
     "fast-check": "4.10.1",
     "pdfjs-dist": "6.3.289",
     "tsx": "4.23.13",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "webmcp-types": "0.1.10"
   }
 }

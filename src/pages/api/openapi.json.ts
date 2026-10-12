@@ -46,5 +46,17 @@ export const GET: APIRoute = () =>
           },
         },
       },
+      "/api/webmcp-index.json": {
+        get: {
+          summary:
+            "Read the structured index of posts, talks, and events behind the WebMCP tools",
+          responses: {
+            "200": {
+              description: "Content index",
+              content: { "application/json": {} },
+            },
+          },
+        },
+      },
     },
   });
