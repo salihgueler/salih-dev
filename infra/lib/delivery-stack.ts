@@ -211,7 +211,10 @@ export class SalihDevDeliveryStack extends Stack {
       },
       handler: "index.handler",
       logGroup: renderLogGroup,
-      memorySize: 1024,
+      // Lambda CPU scales with memory. At 1024 MB a cold blog post page took
+      // about 4.4 s, most of it building the Shiki highlighter; 2048 MB gives
+      // twice the CPU for that first compile.
+      memorySize: 2048,
       runtime: lambda.Runtime.NODEJS_24_X,
       timeout: Duration.seconds(29),
     });
