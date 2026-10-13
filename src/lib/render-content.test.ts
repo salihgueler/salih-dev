@@ -227,7 +227,7 @@ test("reads blog posts from S3 on each request: added, removed and invalid", asy
     posts.map((post) => post.id),
     ["first-post", "second-post"],
   );
-  assert.ok(posts[0].renderedHtml.includes("<strong>markdown</strong>"));
+  assert.ok((await posts[0].renderHtml()).includes("<strong>markdown</strong>"));
   assert.ok(store.sentGets.every((key) => key.startsWith("posts/")));
 
   // Removing an object removes the post on the next request; nothing is cached

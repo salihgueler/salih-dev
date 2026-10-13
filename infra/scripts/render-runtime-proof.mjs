@@ -16,8 +16,9 @@
  *   1. shared page  -> /talks/ renders through Astro (x-render-path: lambda)
  *                      with the edge-cacheable Cache-Control and no Set-Cookie,
  *                      even with no AppConfig agent running.
- *   2. per-visitor  -> a blog post page sends `private, no-store` and mints a
- *                      vid cookie with Secure; HttpOnly; SameSite=Lax.
+ *   2. per-visitor  -> a blog post page renders its compiled body, sends
+ *                      `private, no-store` and mints a vid cookie with Secure;
+ *                      HttpOnly; SameSite=Lax. The blog index lists the post.
  *   3. read failure -> /talks/ with the content object missing falls back to
  *                      the baked page (x-render-path: static).
  *
@@ -44,9 +45,31 @@ const SITE_CONTENT = readFileSync(
 const BAKED_TALKS_HTML =
   "<!doctype html><html><head><title>Talks</title></head><body><h1>Talks (baked)</h1></body></html>";
 
+// One schema-valid blog post, so a post page renders its compiled body.
+const POST_BODY = [
+  "---",
+  "title: Proof post",
+  "description: A description.",
+  "pubDate: 2026-06-18",
+  "category: Testing",
+  "tags:",
+  "  - alpha",
+  "hero:",
+  "  src: https://salih.dev/images/blog/x.webp",
+  "  alt: Alt",
+  "  credit: Someone",
+  "  creditUrl: https://example.com/",
+  "aiSummary: A summary.",
+  "---",
+  "",
+  "Some **markdown** in the proof post.",
+  "",
+].join("\n");
+
 // The S3 objects the stub serves, keyed by "<bucket>/<key>".
 const OBJECTS = new Map([
   [`${CONTENT_BUCKET}/site/content.v1.json`, SITE_CONTENT],
+  [`${CONTENT_BUCKET}/posts/some-post.md`, POST_BODY],
   [`${SITE_BUCKET}/talks/index.html`, BAKED_TALKS_HTML],
 ]);
 
@@ -179,6 +202,15 @@ async function main() {
     status: post.statusCode,
     cacheControl: headerOf(post, "cache-control"),
     setCookie: post.cookies ?? [],
+    compiledBody: bodyOf(post).includes("<strong>markdown</strong>"),
+  };
+
+  // 2b. The blog index lists the post without compiling it.
+  const index = await invoke(handler, "/blog/");
+  results.blog_index = {
+    status: index.statusCode,
+    cacheControl: headerOf(index, "cache-control"),
+    listsPost: bodyOf(index).includes("Proof post"),
   };
   await new Promise((r) => agent.close(r));
 
