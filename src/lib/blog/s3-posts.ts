@@ -84,6 +84,33 @@ export function parseStoredPost(
   return { id, data: result.data, body: content };
 }
 
+/** The Markdown processor, built once per container (it loads the highlighter). */
+let processorPromise: ReturnType<typeof createMarkdownProcessor> | null = null;
+
+function markdownProcessor(): ReturnType<typeof createMarkdownProcessor> {
+  if (processorPromise === null) {
+    processorPromise = createMarkdownProcessor(MARKDOWN_CONFIG);
+    // A failed build must not stick: the next request tries again.
+    processorPromise.catch(() => {
+      processorPromise = null;
+    });
+  }
+  return processorPromise;
+}
+
+/**
+ * Rendered posts kept for the life of the container, keyed by object key. An
+ * entry is reused only when the stored body is byte-identical, so an edited
+ * post is re-rendered on the first request that reads the new body.
+ */
+const renderedPosts = new Map<string, Readonly<{ source: string; post: RequestTimePost }>>();
+
+/** Test seam: forgets the cached processor and rendered posts. */
+export function resetPostRenderCacheForTests(): void {
+  processorPromise = null;
+  renderedPosts.clear();
+}
+
 /**
  * Turns stored post objects into the request-time published-posts override,
  * compiling each accepted post's body through the shared Markdown config so the
@@ -91,34 +118,51 @@ export function parseStoredPost(
  * them, exactly as `getPublishedPosts` filters the collection) so the override
  * is a faithful stand-in for the collection. Dropped keys are returned for the
  * caller to log; they are never served.
+ *
+ * Building the processor and compiling every post took about 2.5 s per request
+ * on the render Lambda, so both are memoized per container. The S3 reads still
+ * happen on every request, so a changed or removed post shows up at once.
  */
 export async function requestTimePostsFromObjects(
   objects: readonly StoredPostObject[],
 ): Promise<
   Readonly<{ posts: readonly RequestTimePost[]; droppedKeys: readonly string[] }>
 > {
-  const processor = await createMarkdownProcessor(MARKDOWN_CONFIG);
   const posts: RequestTimePost[] = [];
   const droppedKeys: string[] = [];
+  const seen = new Set<string>();
 
   await Promise.all(
     objects.map(async (object) => {
+      seen.add(object.key);
+      const cached = renderedPosts.get(object.key);
+      if (cached !== undefined && cached.source === object.body) {
+        posts.push(cached.post);
+        return;
+      }
       const parsed = parseStoredPost(object);
       if (parsed === null) {
+        renderedPosts.delete(object.key);
         droppedKeys.push(object.key);
         return;
       }
+      const processor = await markdownProcessor();
       const rendered = await processor.render(parsed.body);
-      posts.push(
-        Object.freeze({
-          id: parsed.id,
-          data: parsed.data,
-          body: parsed.body,
-          renderedHtml: rendered.code,
-        }),
-      );
+      const post: RequestTimePost = Object.freeze({
+        id: parsed.id,
+        data: parsed.data,
+        body: parsed.body,
+        renderedHtml: rendered.code,
+      });
+      renderedPosts.set(object.key, Object.freeze({ source: object.body, post }));
+      posts.push(post);
     }),
   );
+
+  // Drop entries for posts that are no longer stored.
+  for (const key of renderedPosts.keys()) {
+    if (!seen.has(key)) renderedPosts.delete(key);
+  }
 
   // Stable id order so the derived listings are reproducible; the pages re-sort
   // by date, so this only fixes the tiebreak among equal dates.
