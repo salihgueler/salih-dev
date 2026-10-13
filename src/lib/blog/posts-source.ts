@@ -19,10 +19,11 @@
  * read-only within its scope, so one request can never leak posts into another.
  *
  * A request-time post carries the same fields the pages read from a collection
- * entry (`id`, validated `data`, raw `body`) plus `renderedHtml`: the post body
- * compiled at request time through the shared Markdown config, byte-identical to
- * what Astro's build-time `render()` would produce (the reliability proof diffs
- * the two). `[slug].astro` renders that HTML directly in the SSR path instead of
+ * entry (`id`, validated `data`, raw `body`) plus `renderHtml`: compiles the
+ * post body through the shared Markdown config, byte-identical to what Astro's
+ * build-time `render()` would produce (the reliability proof diffs the two).
+ * Compiling is lazy and memoized, because only a post's own page needs its
+ * HTML; the listings read `data` and `body` only. `[slug].astro` renders that HTML directly in the SSR path instead of
  * calling `render()`, which only works on build-time-compiled entries.
  */
 
@@ -38,8 +39,8 @@ export type RequestTimePost = Readonly<{
   data: BlogPostData;
   /** Raw Markdown body (used by the Markdown documents serializer). */
   body: string;
-  /** The body compiled to HTML at request time through the shared config. */
-  renderedHtml: string;
+  /** Compiles the body to HTML through the shared config (memoized). */
+  renderHtml: () => Promise<string>;
 }>;
 
 const overrideStorage = new AsyncLocalStorage<readonly RequestTimePost[]>();
@@ -63,8 +64,9 @@ export function requestTimePosts(): readonly RequestTimePost[] | null {
 }
 
 /** The rendered HTML for one request-time post id, if a request scope is set. */
-export function requestTimePostHtml(id: string): string | null {
+export async function requestTimePostHtml(id: string): Promise<string | null> {
   const posts = overrideStorage.getStore();
   if (posts === undefined) return null;
-  return posts.find((post) => post.id === id)?.renderedHtml ?? null;
+  const post = posts.find((entry) => entry.id === id);
+  return post === undefined ? null : post.renderHtml();
 }

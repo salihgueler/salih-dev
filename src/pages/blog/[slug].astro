@@ -45,7 +45,7 @@ const BuildTimeContent = buildTimePost
   ? (await render(buildTimePost)).Content
   : null;
 const requestTimeHtml = BuildTimeContent === null
-  ? requestTimePostHtml(post.id)
+  ? await requestTimePostHtml(post.id)
   : null;
 
 const canonical = post.data.canonical ?? new URL(`/blog/${post.id}/`, Astro.site);

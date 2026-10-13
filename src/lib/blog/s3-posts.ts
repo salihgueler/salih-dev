@@ -99,28 +99,47 @@ function markdownProcessor(): ReturnType<typeof createMarkdownProcessor> {
 }
 
 /**
- * Rendered posts kept for the life of the container, keyed by object key. An
+ * Parsed posts kept for the life of the container, keyed by object key. An
  * entry is reused only when the stored body is byte-identical, so an edited
- * post is re-rendered on the first request that reads the new body.
+ * post is re-parsed (and re-rendered when asked) on the first request that
+ * reads the new body.
  */
-const renderedPosts = new Map<string, Readonly<{ source: string; post: RequestTimePost }>>();
+const parsedPosts = new Map<string, Readonly<{ source: string; post: RequestTimePost }>>();
 
-/** Test seam: forgets the cached processor and rendered posts. */
+/** Test seam: forgets the cached processor and parsed posts. */
 export function resetPostRenderCacheForTests(): void {
   processorPromise = null;
-  renderedPosts.clear();
+  parsedPosts.clear();
+}
+
+/** A memoized compile of one post body; a failed compile is retried next time. */
+function lazyHtml(body: string): () => Promise<string> {
+  let html: Promise<string> | null = null;
+  return () => {
+    if (html === null) {
+      html = markdownProcessor().then(async (processor) => (await processor.render(body)).code);
+      html.catch(() => {
+        html = null;
+      });
+    }
+    return html;
+  };
 }
 
 /**
- * Turns stored post objects into the request-time published-posts override,
- * compiling each accepted post's body through the shared Markdown config so the
- * rendered HTML matches the static build. Drafts are kept here (the pages filter
- * them, exactly as `getPublishedPosts` filters the collection) so the override
- * is a faithful stand-in for the collection. Dropped keys are returned for the
- * caller to log; they are never served.
+ * Turns stored post objects into the request-time published-posts override.
+ * Every post's frontmatter is validated here, so an invalid post is dropped
+ * before any page sees it. Its body is compiled through the shared Markdown
+ * config only when a page asks for the HTML, so the rendered HTML matches the
+ * static build. Drafts are kept here (the pages filter them, exactly as
+ * `getPublishedPosts` filters the collection) so the override is a faithful
+ * stand-in for the collection. Dropped keys are returned for the caller to log;
+ * they are never served.
  *
- * Building the processor and compiling every post took about 2.5 s per request
- * on the render Lambda, so both are memoized per container. The S3 reads still
+ * Building the processor and compiling every post on every request took about
+ * 2.5 s of a warm render Lambda invocation and about 11 s on a cold one. Now
+ * the listings compile nothing, a post page compiles one body, and both the
+ * processor and each compile are memoized per container. The S3 reads still
  * happen on every request, so a changed or removed post shows up at once.
  */
 export async function requestTimePostsFromObjects(
@@ -132,36 +151,32 @@ export async function requestTimePostsFromObjects(
   const droppedKeys: string[] = [];
   const seen = new Set<string>();
 
-  await Promise.all(
-    objects.map(async (object) => {
-      seen.add(object.key);
-      const cached = renderedPosts.get(object.key);
-      if (cached !== undefined && cached.source === object.body) {
-        posts.push(cached.post);
-        return;
-      }
-      const parsed = parseStoredPost(object);
-      if (parsed === null) {
-        renderedPosts.delete(object.key);
-        droppedKeys.push(object.key);
-        return;
-      }
-      const processor = await markdownProcessor();
-      const rendered = await processor.render(parsed.body);
-      const post: RequestTimePost = Object.freeze({
-        id: parsed.id,
-        data: parsed.data,
-        body: parsed.body,
-        renderedHtml: rendered.code,
-      });
-      renderedPosts.set(object.key, Object.freeze({ source: object.body, post }));
-      posts.push(post);
-    }),
-  );
+  for (const object of objects) {
+    seen.add(object.key);
+    const cached = parsedPosts.get(object.key);
+    if (cached !== undefined && cached.source === object.body) {
+      posts.push(cached.post);
+      continue;
+    }
+    const parsed = parseStoredPost(object);
+    if (parsed === null) {
+      parsedPosts.delete(object.key);
+      droppedKeys.push(object.key);
+      continue;
+    }
+    const post: RequestTimePost = Object.freeze({
+      id: parsed.id,
+      data: parsed.data,
+      body: parsed.body,
+      renderHtml: lazyHtml(parsed.body),
+    });
+    parsedPosts.set(object.key, Object.freeze({ source: object.body, post }));
+    posts.push(post);
+  }
 
   // Drop entries for posts that are no longer stored.
-  for (const key of renderedPosts.keys()) {
-    if (!seen.has(key)) renderedPosts.delete(key);
+  for (const key of parsedPosts.keys()) {
+    if (!seen.has(key)) parsedPosts.delete(key);
   }
 
   // Stable id order so the derived listings are reproducible; the pages re-sort
