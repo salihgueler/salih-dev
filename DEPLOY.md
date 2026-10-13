@@ -551,6 +551,17 @@ CodeBuild, or change DNS or nameservers.
 
 ## 11. Roll out request-time rendering with the `renderFromBackend` flag
 
+> **Status (2026-10-13): the flag is removed.** Every visitor gets the
+> request-time render. Dynamic routes that are the same for everyone (`/`,
+> `/talks/`, `/blog/`, listings, feeds) send `s-maxage=300` with
+> `stale-if-error=86400` again and are edge-cached through the
+> `salih-dev-render` cache policy. A blog post's HTML page still sends
+> `private, no-store`, because its `readerCounts` and `comments` flags are
+> decided per visitor, and it is the only dynamic route that sets the `vid`
+> cookie. A failed render still falls back to the baked page, and content
+> writes still start the publisher so those baked pages stay current. The rest
+> of this section is the rollout history.
+
 Request-time rendering ships behind an AppConfig feature flag. The CDK stack
 creates the AppConfig application `salih-dev`, the environment `production`, the
 feature-flag profile `render-flags` and the deployment strategy
@@ -758,26 +769,27 @@ functions (through `rolloutActive: true` on `ContentApi`) and the
 With caching off, `stale-if-error` has nothing to serve during an outage. The
 baked-page fallback and the rollback alarms cover that window.
 
-### Remove the flag at 100%
+### Flag removal (done 2026-10-13)
 
-Once the flag has been at 100% with no alarm for a few days, remove it in a
-code change:
+The flag was removed after about two weeks on for the author with no alarm:
 
-1. Delete the flag read and the off path from `src/middleware.ts` (`getRenderFlag`,
-   `serveOffPath`) and the off-path modules and tests.
-2. Drop `RENDER_ROLLOUT_ACTIVE` from the render Lambda and the `DevImporter`
-   in `infra/lib/delivery-stack.ts`, and pass `rolloutActive: false` to
-   `ContentApi`. That restores `DYNAMIC_CACHE_CONTROL` (`s-maxage=300`,
-   `stale-if-error=86400`), stops the rollout-time publisher builds, and drops
-   the write functions' `codebuild:StartBuild` grant.
-3. Put the render behavior back on the original render cache policy, remove the
-   site-bucket read grant for baked pages, and remove the AppConfig Agent layer
-   and IAM from the render Lambda.
-4. Keep the `vid` cookie and the AppConfig application if the homepage A/B test
-   will use them; otherwise remove them too.
+1. `src/middleware.ts` no longer reads `renderFromBackend`. The baked-page
+   path (`serveOffPath`) stays as the fallback for a failed render.
+2. `RENDER_ROLLOUT_ACTIVE` is gone from the render Lambda. The page decides
+   its own Cache-Control through `successCacheControl(perVisitor)` in
+   `src/lib/render-cache.ts`.
+3. The render behavior uses the edge-caching `salih-dev-render` cache policy
+   (default TTL 5 minutes, max TTL 24 hours, cache key `Accept` only) instead
+   of the zero-TTL `salih-dev-render-rollout` policy.
+4. Kept on purpose: the AppConfig agent layer and IAM on the render Lambda
+   (blog posts read `readerCounts` and `comments`), the site-bucket read grant
+   (the fallback), and `RENDER_ROLLOUT_ACTIVE` on the content write functions
+   and the `DevImporter`, where it now only means "start the publisher after a
+   write" so the fallback pages stay current. The `renderFromBackend` key is
+   still in the AppConfig content and is not read by anything.
 
-A missing `site/content.v1.json` or an S3 read failure then returns an uncached
-502 again, and CloudFront serves the last good page through `stale-if-error`.
+Once `readerCounts` and `comments` are on for everyone or removed, blog post
+pages can drop `private, no-store` too.
 
 ## 12. Roll out reader counts with the `readerCounts` flag
 

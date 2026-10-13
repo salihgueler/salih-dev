@@ -205,14 +205,9 @@ export class SalihDevDeliveryStack extends Stack {
       environment: {
         CONTENT_BUCKET_NAME: props.contentBucket.bucketName,
         SALIH_DEV_SSR: "1",
-        // The off path (flag off) serves the baked static page for the route
-        // from the site bucket; the on path renders through Astro.
+        // A failed request-time render falls back to the baked static page
+        // for the route from the site bucket.
         SITE_BUCKET_NAME: siteBucket.bucketName,
-        // While the rollout is active, render responses are `private, no-store`
-        // so the flag decision runs per visitor and a rollback is immediate.
-        // Set to "0" (or removed) once the flag is deleted to restore edge
-        // caching (DYNAMIC_CACHE_CONTROL).
-        RENDER_ROLLOUT_ACTIVE: "1",
       },
       handler: "index.handler",
       logGroup: renderLogGroup,
@@ -626,48 +621,25 @@ export class SalihDevDeliveryStack extends Stack {
 
     // Dynamic routes cache briefly at the edge and are refreshed by the write
     // paths' scoped invalidation; the cache key includes Accept so HTML and
-    // Markdown negotiate correctly.
+    // Markdown negotiate correctly. The render Lambda's Cache-Control decides
+    // what is cached: `s-maxage=300` with `stale-if-error=86400` for pages that
+    // are the same for every visitor, and `private, no-store` for a blog post's
+    // HTML page, whose reader-counts and comments flags are decided per visitor
+    // (see src/lib/render-cache.ts). The cookie is NOT part of the cache key;
+    // that would fragment the cache per visitor. maxTtl is 24 hours because
+    // CloudFront caps the stale-if-error window at the policy's maximum TTL.
     //
-    // RESTORE AT FLAG REMOVAL (render-rollout-flag, Step 11): PR #10's
-    // edge-caching render cache policy is replaced during the rollout by
-    // `renderRolloutCachePolicy` below (which caches nothing so the per-visitor
-    // flag decision runs on every request). When the flag is removed, restore
-    // this policy on the render behavior to bring back edge caching and the
-    // `stale-if-error` outage window (see DYNAMIC_CACHE_CONTROL in
-    // src/lib/render-cache.ts, kept in code for exactly this):
-    //
-    //   const renderCachePolicy = new cloudfront.CachePolicy(this,
-    //     "RenderCachePolicy", {
-    //       cachePolicyName: "salih-dev-render",
-    //       defaultTtl: Duration.minutes(5),
-    //       maxTtl: Duration.hours(24),
-    //       minTtl: Duration.seconds(0),
-    //       headerBehavior: cloudfront.CacheHeaderBehavior.allowList("Accept"),
-    //       cookieBehavior: cloudfront.CacheCookieBehavior.none(),
-    //       queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
-    //       enableAcceptEncodingGzip: true,
-    //       enableAcceptEncodingBrotli: true,
-    //     });
-
-    // --- Rollout caching (render-rollout-flag, Step 8) ---
-    // While the flag exists, the flag decision is per visitor (keyed on the
-    // `vid` cookie), so the render behavior must NOT cache: a shared cached
-    // object would serve one visitor's version to everyone and the flag would
-    // never re-evaluate. This policy caches nothing (all TTLs 0). The
-    // edge-caching `renderCachePolicy` above is kept in code to restore when the
-    // flag is removed (Step 11).
-    const renderRolloutCachePolicy = new cloudfront.CachePolicy(
+    // This replaced the zero-TTL `salih-dev-render-rollout` policy on
+    // 2026-10-13, when the `renderFromBackend` flag was removed.
+    const renderCachePolicy = new cloudfront.CachePolicy(
       this,
-      "RenderRolloutCachePolicy",
+      "RenderCachePolicy",
       {
-        cachePolicyName: "salih-dev-render-rollout",
-        defaultTtl: Duration.seconds(0),
-        maxTtl: Duration.seconds(1),
+        cachePolicyName: "salih-dev-render",
+        defaultTtl: Duration.minutes(5),
+        maxTtl: Duration.hours(24),
         minTtl: Duration.seconds(0),
         headerBehavior: cloudfront.CacheHeaderBehavior.allowList("Accept"),
-        // The cookie is NOT part of the cache key (that would fragment the
-        // cache per visitor); the origin re-decides per request because nothing
-        // is cached.
         cookieBehavior: cloudfront.CacheCookieBehavior.none(),
         queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
         enableAcceptEncodingGzip: true,
@@ -693,7 +665,7 @@ export class SalihDevDeliveryStack extends Stack {
 
     const renderBehavior: cloudfront.BehaviorOptions = {
       allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD_OPTIONS,
-      cachePolicy: renderRolloutCachePolicy,
+      cachePolicy: renderCachePolicy,
       originRequestPolicy: renderOriginRequestPolicy,
       compress: true,
       functionAssociations: [

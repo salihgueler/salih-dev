@@ -1,5 +1,5 @@
 /**
- * Render Lambda runtime proof for the render-rollout-flag feature.
+ * Render Lambda runtime proof.
  *
  * Runs INSIDE the real AWS Lambda Node 24 arm64 image (public.ecr.aws), with
  * `--network none`, so the built SSR server and the flag helper run on the same
@@ -7,21 +7,19 @@
  * loopback stubs and drives the built handler (`./index.mjs`) directly:
  *
  * - an S3 stub on 127.0.0.1 (pointed at via AWS_ENDPOINT_URL_S3) that serves the
- *   content objects the on-path render reads AND the baked pages the off path
- *   reads;
- * - an AppConfig Agent stub on 127.0.0.1:2772 that answers the flag read with a
+ *   content objects the render reads AND the baked pages the fallback reads;
+ * - an AppConfig Agent stub on 127.0.0.1:2772 that answers flag reads with a
  *   chosen `enabled` value; when it is NOT started, the flag read fails to
- *   connect (the "extension down" case), which must fall to the off path.
+ *   connect (the "extension down" case).
  *
- * Scenarios proven:
- *   1. flag ON      -> the render Lambda renders /talks/ through Astro
- *                      (x-render-path: lambda), status 200.
- *   2. flag OFF     -> the baked /talks/ page is served byte-identically
- *                      (x-render-path: static), status 200.
- *   3. extension down -> no agent on 2772; the handler falls to the baked page.
- *   4. cookie mint  -> a request without a vid cookie gets a Set-Cookie with
- *                      Secure; HttpOnly; SameSite=Lax.
- *   5. flag ON, content read fails -> the on path falls back to the baked page.
+ * The `renderFromBackend` flag was removed on 2026-10-13. Scenarios proven:
+ *   1. shared page  -> /talks/ renders through Astro (x-render-path: lambda)
+ *                      with the edge-cacheable Cache-Control and no Set-Cookie,
+ *                      even with no AppConfig agent running.
+ *   2. per-visitor  -> a blog post page sends `private, no-store` and mints a
+ *                      vid cookie with Secure; HttpOnly; SameSite=Lax.
+ *   3. read failure -> /talks/ with the content object missing falls back to
+ *                      the baked page (x-render-path: static).
  *
  * Usage (inside the container): node render-runtime-proof.mjs
  * The package (index.mjs + server/ + client/) is mounted at /var/task.
@@ -154,76 +152,45 @@ async function main() {
   process.env.SITE_BUCKET_NAME = SITE_BUCKET;
   process.env.SALIH_DEV_SSR = "1";
   process.env.SITE_CONTENT_TODAY = "2026-09-29";
-  process.env.RENDER_ROLLOUT_ACTIVE = "1";
   process.env.APPCONFIG_APPLICATION = "salih-dev";
   process.env.APPCONFIG_ENVIRONMENT = "production";
   process.env.APPCONFIG_PROFILE = "render-flags";
 
   const { handler } = await import("./index.mjs");
   const results = {};
+  const bodyOf = (r) =>
+    r.isBase64Encoded ? Buffer.from(r.body ?? "", "base64").toString("utf8") : r.body ?? "";
 
-  // 1. flag ON -> Astro render (x-render-path: lambda).
-  let agent = await startAgentStub(true);
-  const on = await invoke(handler, "/talks/");
-  const onBody = on.isBase64Encoded
-    ? Buffer.from(on.body ?? "", "base64").toString("utf8")
-    : on.body;
-  results.flag_on = {
-    status: on.statusCode,
-    renderPath: headerOf(on, "x-render-path"),
-    bodyPreview: (onBody ?? "").slice(0, 300),
-    astroRendered:
-      on.statusCode === 200 && headerOf(on, "x-render-path") === "lambda",
+  // 1. A shared page renders for everyone, edge-cacheable, without a cookie.
+  //    No agent is running: the page must not depend on any flag read.
+  const shared = await invoke(handler, "/talks/");
+  results.shared_page = {
+    status: shared.statusCode,
+    renderPath: headerOf(shared, "x-render-path"),
+    cacheControl: headerOf(shared, "cache-control"),
+    setCookie: shared.cookies ?? [],
+    bodyPreview: bodyOf(shared).slice(0, 120),
+  };
+
+  // 2. A blog post page differs per visitor: no-store, and it mints the vid.
+  const agent = await startAgentStub(false);
+  const post = await invoke(handler, "/blog/some-post/");
+  results.per_visitor_page = {
+    status: post.statusCode,
+    cacheControl: headerOf(post, "cache-control"),
+    setCookie: post.cookies ?? [],
   };
   await new Promise((r) => agent.close(r));
 
-  // 2. flag OFF -> baked page (x-render-path: static), byte-identical.
-  agent = await startAgentStub(false);
-  const off = await invoke(handler, "/talks/");
-  const offBody = off.isBase64Encoded
-    ? Buffer.from(off.body, "base64").toString("utf8")
-    : off.body;
-  results.flag_off = {
-    status: off.statusCode,
-    renderPath: headerOf(off, "x-render-path"),
-    byteIdenticalToBaked: offBody === BAKED_TALKS_HTML,
-  };
-  await new Promise((r) => agent.close(r));
-
-  // 3. extension DOWN (no agent) -> off path (baked page).
-  const down = await invoke(handler, "/talks/");
-  const downBody = down.isBase64Encoded
-    ? Buffer.from(down.body, "base64").toString("utf8")
-    : down.body;
-  results.extension_down = {
-    status: down.statusCode,
-    renderPath: headerOf(down, "x-render-path"),
-    servedBaked: downBody === BAKED_TALKS_HTML,
-  };
-
-  // 4. cookie mint when missing (off path, no agent).
-  const minted = await invoke(handler, "/talks/");
-  const setCookie = minted.cookies ?? [];
-  const vidCookie = setCookie.find((c) => c.startsWith("vid="));
-  results.cookie_mint = {
-    setCookiePresent: vidCookie !== undefined,
-    attributes: vidCookie ?? null,
-  };
-
-  // 5. flag ON but the content read fails (site content object removed) ->
-  //    the on path falls back to the baked page instead of a 502.
+  // 3. The content read fails -> the baked page instead of a 502.
   OBJECTS.delete(`${CONTENT_BUCKET}/site/content.v1.json`);
-  agent = await startAgentStub(true);
   const readFail = await invoke(handler, "/talks/");
-  const readFailBody = readFail.isBase64Encoded
-    ? Buffer.from(readFail.body, "base64").toString("utf8")
-    : readFail.body;
-  results.flag_on_read_failure = {
+  results.read_failure = {
     status: readFail.statusCode,
     renderPath: headerOf(readFail, "x-render-path"),
-    servedBaked: readFailBody === BAKED_TALKS_HTML,
+    cacheControl: headerOf(readFail, "cache-control"),
+    servedBaked: bodyOf(readFail) === BAKED_TALKS_HTML,
   };
-  await new Promise((r) => agent.close(r));
 
   await new Promise((r) => s3.close(r));
   process.stdout.write(JSON.stringify(results, null, 2) + "\n");

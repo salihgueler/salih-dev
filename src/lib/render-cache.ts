@@ -40,38 +40,25 @@ export const DYNAMIC_CACHE_CONTROL =
 export const FAILURE_CACHE_CONTROL = "no-store";
 
 /**
- * Cache-Control for a successful dynamic-route response WHILE THE ROLLOUT FLAG
- * IS ACTIVE.
+ * Cache-Control for a successful response whose HTML differs per visitor.
  *
- * Feature: render-rollout-flag (Part 2, Step 8).
+ * A blog post's HTML page carries the reader-counts widget and the comments
+ * section only for visitors their flags (`readerCounts`, `comments`) are on
+ * for, decided from the `vid` cookie. CloudFront's cache key is `Accept` only
+ * (no cookie), so caching that page would serve one visitor's version to
+ * everyone. `private, no-store` keeps it out of the edge cache, so every
+ * request re-runs the flag decision.
  *
- * During the rollout the flag decision is per visitor (keyed on the `vid`
- * cookie), but {@link DYNAMIC_CACHE_CONTROL}'s `s-maxage=300` lets CloudFront
- * serve one cached object to every visitor for five minutes with a cache key of
- * `Accept` only (no cookie). The first visitor's version would then be served
- * to everyone hitting that cached object, and the flag would never re-evaluate
- * for them. `private, no-store` makes the edge cache nothing for the dynamic
- * routes, so every request re-runs the flag decision and a rollback takes
- * effect immediately.
- *
- * The trade-off is that {@link DYNAMIC_CACHE_CONTROL}'s `stale-if-error` outage
- * protection is off while the rollout runs, because nothing is cached to serve;
- * the CloudFront origin-group failover (the S3 origin behind the render origin)
- * is the safety net that replaces it during the rollout. Once the flag is
- * removed (Step 11), {@link DYNAMIC_CACHE_CONTROL} is restored.
+ * Until 2026-10-13 every dynamic route sent this while the `renderFromBackend`
+ * rollout ran. With that flag gone only the per-visitor pages still need it.
  */
-export const ROLLOUT_CACHE_CONTROL = "private, no-store";
+export const PER_VISITOR_CACHE_CONTROL = "private, no-store";
 
 /**
- * Selects the Cache-Control a successful dynamic-route response should carry.
- *
- * While the rollout is active (the `RENDER_ROLLOUT_ACTIVE` environment flag is
- * `"1"`), a good render must not be edge-cached, because the flag decision is
- * per visitor; see {@link ROLLOUT_CACHE_CONTROL}. Otherwise the normal
- * edge-cacheable {@link DYNAMIC_CACHE_CONTROL} applies.
+ * Selects the Cache-Control a successful dynamic-route response should carry:
+ * {@link PER_VISITOR_CACHE_CONTROL} when the page differs per visitor,
+ * otherwise the edge-cacheable {@link DYNAMIC_CACHE_CONTROL}.
  */
-export function successCacheControl(
-  rolloutActive: boolean = process.env.RENDER_ROLLOUT_ACTIVE === "1",
-): string {
-  return rolloutActive ? ROLLOUT_CACHE_CONTROL : DYNAMIC_CACHE_CONTROL;
+export function successCacheControl(perVisitor: boolean): string {
+  return perVisitor ? PER_VISITOR_CACHE_CONTROL : DYNAMIC_CACHE_CONTROL;
 }

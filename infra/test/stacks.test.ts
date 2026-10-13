@@ -708,13 +708,12 @@ test("adds a read-only render origin behind CloudFront for the dynamic routes", 
       // PR #10 base.
       "CONTENT_BUCKET_NAME",
       "SALIH_DEV_SSR",
-      // render-rollout-flag: the AppConfig flag coordinates, the extension
-      // prefetch path, the off-path site bucket, and the rollout marker.
+      // The AppConfig flag coordinates and the extension prefetch path (the
+      // readerCounts and comments flags), and the fallback site bucket.
       "APPCONFIG_APPLICATION",
       "APPCONFIG_ENVIRONMENT",
       "APPCONFIG_PROFILE",
       "AWS_APPCONFIG_EXTENSION_PREFETCH_LIST",
-      "RENDER_ROLLOUT_ACTIVE",
       "SITE_BUCKET_NAME",
     ].sort(),
   );
