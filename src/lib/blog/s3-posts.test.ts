@@ -14,6 +14,7 @@ import {
   parseStoredPost,
   postIdFromKey,
   requestTimePostsFromObjects,
+  resetPostRenderCacheForTests,
   type StoredPostObject,
 } from "./s3-posts.js";
 
@@ -84,4 +85,32 @@ test("requestTimePostsFromObjects renders valid posts and drops invalid ones", a
   assert.ok(posts[0].renderedHtml.includes("<strong>markdown</strong>"));
   assert.ok(posts[0].renderedHtml.includes('<a href="https://example.com/">'));
   assert.deepEqual([...droppedKeys], ["posts/broken.md", "posts/nested/x.md"]);
+});
+
+test("an unchanged post is reused across requests and a changed one is re-rendered", async () => {
+  resetPostRenderCacheForTests();
+  const first = await requestTimePostsFromObjects([validPost("a-post", "Alpha", "2026-06-18")]);
+  const again = await requestTimePostsFromObjects([validPost("a-post", "Alpha", "2026-06-18")]);
+  // Same body: the memoized post object comes back, nothing is recompiled.
+  assert.equal(again.posts[0], first.posts[0]);
+
+  const edited = validPost("a-post", "Alpha", "2026-06-18");
+  const changed = await requestTimePostsFromObjects([
+    { key: edited.key, body: edited.body.replace("Some **markdown**", "Edited **text**") },
+  ]);
+  assert.notEqual(changed.posts[0], first.posts[0]);
+  assert.ok(changed.posts[0].renderedHtml.includes("<strong>text</strong>"));
+});
+
+test("a post that becomes invalid or is removed is not served from the memo", async () => {
+  resetPostRenderCacheForTests();
+  await requestTimePostsFromObjects([
+    validPost("a-post", "Alpha", "2026-06-18"),
+    validPost("b-post", "Beta", "2026-04-02"),
+  ]);
+  const { posts, droppedKeys } = await requestTimePostsFromObjects([
+    { key: "posts/a-post.md", body: "---\ntitle: broken now\n---\n" },
+  ]);
+  assert.equal(posts.length, 0);
+  assert.deepEqual([...droppedKeys], ["posts/a-post.md"]);
 });
