@@ -63,18 +63,22 @@ Markdown configuration (`src/lib/markdown-config.ts`) as the static build. Set
 indexes. Permanent identity, biography, social links, and map presentation live
 in `src/config/site.ts`.
 
-Talks have two authoring sources that converge before validation. Repository-authored
-Markdown records live under `src/content/talks/` with PDFs under
-`public/talks/slides/`; they are changed only through Git. API-authored records
-and approved decks live under `talks/records/` and `talks/decks/` in the retained
-content bucket. The live Talks routes read API-authored records from the bucket
-at request time and link slides straight to `talks/decks/` through CloudFront.
-Repository-authored records currently reach only the static build. The
-publisher synchronizes the bucket objects to separate local
+Talks are added through the talk API. Every live talk is an API-authored record
+under `talks/records/` with its approved deck under `talks/decks/` in the
+retained content bucket. The Talks routes read those records at request time and
+link slides straight to `talks/decks/` through CloudFront, so an accepted upload
+or removal is live within seconds without a site build. `DEPLOY.md` section 10
+has the signed-request procedure.
+
+Repository-authored Markdown records under `src/content/talks/` (PDFs under
+`public/talks/slides/`) are a fallback that reaches only the static build, which
+serves visitors the `renderFromBackend` flag is off for. To keep those baked
+pages current, the publisher synchronizes the bucket objects to separate local
 caches and runs `npm run materialize:talks`, which clears and recreates only the
 gitignored `src/content/talks/api/` and `public/talks/slides/api/` namespaces.
 Records without an approved deck and unreferenced decks are excluded, while
-repository-authored files are never modified.
+repository-authored files are never modified. No talk is currently authored in
+Git.
 
 Both sources use the strict `talks` schema in `src/content.config.ts` and the
 shared validators in `src/lib/talks/`. Each record requires `title`, `eventName`,
@@ -110,9 +114,7 @@ state unchanged and preserves the previously published static pages. At request
 time, an API record that fails validation makes the Talks routes fall back to
 the baked page during the flag rollout (and trips the `RenderFailures` alarm),
 and return an uncached 502 once the flag is removed, while CloudFront keeps
-serving the last good page. The collection is
-intentionally empty until the Author supplies a talk through one of these two
-workflows.
+serving the last good page.
 
 For local API materialization, place stored record JSON and approved PDF files
 in separate cache directories, then run:

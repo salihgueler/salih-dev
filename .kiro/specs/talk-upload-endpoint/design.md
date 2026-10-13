@@ -1,5 +1,15 @@
 # Design Document: Talk Upload Endpoint
 
+> **Status update (2026-10-13).** This design shipped, and the backend-served
+> content work later changed how a talk is published. Completion and removal no
+> longer depend on a publisher build: they store state and issue one scoped
+> CloudFront invalidation, and the render Lambda serves the Talks routes from
+> `talks/records/` at request time. The publisher still runs during the
+> `renderFromBackend` rollout to refresh the baked fallback pages, so responses
+> may carry a `buildId` next to the `invalidationId`. Where this document says
+> completion "starts exactly one publisher build", read it as history.
+> `DEPLOY.md` section 10 is the current procedure.
+
 ## Overview
 
 The talk upload endpoint adds four routes to the existing `salih-dev-content` HTTP API so the Author can stage a PDF slide deck and, optionally, a complete talk record without a repository commit. Slide bytes never pass through API Gateway or Lambda: the API issues a short-lived, single-object write grant and the Author transfers the deck straight to private storage. A second call validates those untrusted bytes with the same pinned PDF parser the build already uses, records the deck and the talk record in the existing retained content bucket, and starts exactly one publisher build. The publisher materializes API-authored records and their approved decks into a code-owned namespace inside the source tree before validation runs, so from that point on every existing build guarantee applies unchanged.
