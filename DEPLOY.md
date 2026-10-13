@@ -435,7 +435,9 @@ the Talks routes. A successful `202` returns `status: published`, validated
 byte/page counts, `invalidationId`, and, for a metadata upload, `recordKey`,
 `recordVersion`, and the same ETag in the response header. The Talks archive is
 served at request time by the render origin, so the change is live within
-seconds without a publisher build.
+seconds without a publisher build. While the `renderFromBackend` rollout is in
+place, completion also starts the publisher so the baked fallback pages stay
+current, and the response then includes a `buildId`.
 
 Treat errors according to state:
 
