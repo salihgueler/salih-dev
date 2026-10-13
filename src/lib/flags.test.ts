@@ -13,7 +13,6 @@ import test from "node:test";
 import {
   flagConfigFromEnv,
   getFlag,
-  getRenderFlag,
   READER_COUNTS_FLAG_KEY,
   RENDER_FLAG_KEY,
   resetWarmFlagReadForTests,
@@ -47,7 +46,7 @@ function agentBody(attrs: Record<string, unknown>): Record<string, unknown> {
 }
 
 test("returns true when the agent reports the flag enabled", async () => {
-  const on = await getRenderFlag(
+  const on = await getFlag(RENDER_FLAG_KEY, 
     "v1",
     config,
     depsReturning(agentBody({ enabled: true })),
@@ -56,7 +55,7 @@ test("returns true when the agent reports the flag enabled", async () => {
 });
 
 test("returns false when the agent reports the flag disabled", async () => {
-  const off = await getRenderFlag(
+  const off = await getFlag(RENDER_FLAG_KEY, 
     "v1",
     config,
     depsReturning(agentBody({ enabled: false })),
@@ -65,7 +64,7 @@ test("returns false when the agent reports the flag disabled", async () => {
 });
 
 test("returns false on a non-200 response", async () => {
-  const off = await getRenderFlag(
+  const off = await getFlag(RENDER_FLAG_KEY, 
     "v1",
     config,
     depsReturning(agentBody({ enabled: true }), false),
@@ -80,7 +79,7 @@ test("returns false when fetch throws (network error)", async () => {
       throw new Error("connect ECONNREFUSED");
     }) as unknown as typeof fetch,
   };
-  assert.equal(await getRenderFlag("v1", config, deps), false);
+  assert.equal(await getFlag(RENDER_FLAG_KEY, "v1", config, deps), false);
 });
 
 test("returns false on a timeout (aborted fetch)", async () => {
@@ -93,7 +92,7 @@ test("returns false on a timeout (aborted fetch)", async () => {
         });
       })) as unknown as typeof fetch,
   };
-  assert.equal(await getRenderFlag("v1", config, deps), false);
+  assert.equal(await getFlag(RENDER_FLAG_KEY, "v1", config, deps), false);
 });
 
 test("returns false on a malformed (non-JSON) body", async () => {
@@ -102,19 +101,19 @@ test("returns false on a malformed (non-JSON) body", async () => {
     fetch: (async () =>
       new Response("not json", { status: 200 })) as unknown as typeof fetch,
   };
-  assert.equal(await getRenderFlag("v1", config, deps), false);
+  assert.equal(await getFlag(RENDER_FLAG_KEY, "v1", config, deps), false);
 });
 
 test("returns false when enabled is not a boolean", async () => {
   assert.equal(
-    await getRenderFlag("v1", config, depsReturning(agentBody({ enabled: "yes" }))),
+    await getFlag(RENDER_FLAG_KEY, "v1", config, depsReturning(agentBody({ enabled: "yes" }))),
     false,
   );
 });
 
 test("returns false when the flag key is absent from the body", async () => {
   assert.equal(
-    await getRenderFlag("v1", config, depsReturning({ someOtherFlag: { enabled: true } })),
+    await getFlag(RENDER_FLAG_KEY, "v1", config, depsReturning({ someOtherFlag: { enabled: true } })),
     false,
   );
 });
@@ -124,7 +123,7 @@ test("returns false for the whole-profile shape (flag nested under its key)", as
   // always sends ?flag=, so a nested body is not the shape it asked for and
   // must not be read as on.
   assert.equal(
-    await getRenderFlag(
+    await getFlag(RENDER_FLAG_KEY, 
       "v1",
       config,
       depsReturning({ [RENDER_FLAG_KEY]: { _variant: "author", enabled: true } }),
@@ -135,7 +134,7 @@ test("returns false for the whole-profile shape (flag nested under its key)", as
 
 test("returns false when the flag config is missing", async () => {
   assert.equal(
-    await getRenderFlag("v1", null, depsReturning(agentBody({ enabled: true }))),
+    await getFlag(RENDER_FLAG_KEY, "v1", null, depsReturning(agentBody({ enabled: true }))),
     false,
   );
 });
@@ -151,7 +150,7 @@ test("sends the vid in the Context header and the flag query", async () => {
       return new Response(JSON.stringify({ _variant: "author", enabled: true }), { status: 200 });
     }) as unknown as typeof fetch,
   };
-  await getRenderFlag("abc-123", config, deps);
+  await getFlag(RENDER_FLAG_KEY, "abc-123", config, deps);
   assert.match(seenUrl, /^http:\/\/127\.0\.0\.1:2772\//);
   assert.match(seenUrl, new RegExp(`flag=${RENDER_FLAG_KEY}`));
   assert.equal(seenContext, "vid=abc-123");
@@ -166,7 +165,7 @@ test("omits the Context header when vid is empty", async () => {
       return new Response(JSON.stringify({ enabled: false }), { status: 200 });
     }) as unknown as typeof fetch,
   };
-  await getRenderFlag("", config, deps);
+  await getFlag(RENDER_FLAG_KEY, "", config, deps);
   assert.equal(hadContext, false);
 });
 
@@ -240,9 +239,9 @@ test("the first read on an instance gets the longer cold-start budget", async ()
     fetch: slowAgent(60),
   };
   // 60 ms is over the warm budget but inside the first-read budget.
-  assert.equal(await getRenderFlag("v1", config, deps), true);
+  assert.equal(await getFlag(RENDER_FLAG_KEY, "v1", config, deps), true);
   // Once warm, the same 60 ms answer is a timeout and reads as off.
-  assert.equal(await getRenderFlag("v1", config, deps), false);
+  assert.equal(await getFlag(RENDER_FLAG_KEY, "v1", config, deps), false);
 });
 
 test("a first read that times out leaves the next read cold", async () => {
@@ -252,8 +251,8 @@ test("a first read that times out leaves the next read cold", async () => {
     firstReadTimeoutMs: 40,
     fetch: slowAgent(80),
   };
-  assert.equal(await getRenderFlag("v1", config, deps), false);
+  assert.equal(await getFlag(RENDER_FLAG_KEY, "v1", config, deps), false);
   const quick: FlagReadDeps = { ...deps, fetch: slowAgent(30) };
   // Still cold, so 30 ms fits the 40 ms first-read budget.
-  assert.equal(await getRenderFlag("v1", config, quick), true);
+  assert.equal(await getFlag(RENDER_FLAG_KEY, "v1", config, quick), true);
 });

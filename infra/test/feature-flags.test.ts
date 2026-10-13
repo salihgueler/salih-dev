@@ -165,7 +165,9 @@ test("the render Lambda carries the AppConfig extension layer and coordinates", 
   assert.equal(vars.APPCONFIG_ENVIRONMENT, "production");
   assert.equal(vars.APPCONFIG_APPLICATION, "salih-dev");
   assert.equal(vars.APPCONFIG_PROFILE, "render-flags");
-  assert.equal(vars.RENDER_ROLLOUT_ACTIVE, "1");
+  // The renderFromBackend flag is gone, so the render Lambda no longer carries
+  // the rollout marker that turned edge caching off.
+  assert.ok(!("RENDER_ROLLOUT_ACTIVE" in vars));
   assert.ok("SITE_BUCKET_NAME" in vars);
 });
 
@@ -201,15 +203,23 @@ test("the render behavior forwards only the vid cookie", () => {
   });
 });
 
-test("the rollout render cache policy caches nothing (all TTLs at or near zero)", () => {
+test("the render cache policy edge-caches without a cookie in the key", () => {
   const t = deliveryTemplate();
   t.hasResourceProperties("AWS::CloudFront::CachePolicy", {
     CachePolicyConfig: Match.objectLike({
-      Name: "salih-dev-render-rollout",
-      DefaultTTL: 0,
+      Name: "salih-dev-render",
+      DefaultTTL: 300,
+      MaxTTL: 86400,
       MinTTL: 0,
+      ParametersInCacheKeyAndForwardedToOrigin: Match.objectLike({
+        CookiesConfig: { CookieBehavior: "none" },
+      }),
     }),
   });
+  const names = Object.values(t.findResources("AWS::CloudFront::CachePolicy")).map(
+    (r) => (r.Properties as { CachePolicyConfig: { Name: string } }).CachePolicyConfig.Name,
+  );
+  assert.ok(!names.includes("salih-dev-render-rollout"), "the zero-TTL rollout policy is gone");
 });
 
 test("CloudFront may call the render Function URL and invoke the function", () => {

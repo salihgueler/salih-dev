@@ -1,7 +1,10 @@
 /**
- * Reads the `renderFromBackend` feature flag from the AWS AppConfig Agent.
+ * Reads feature flags from the AWS AppConfig Agent.
  *
- * Feature: render-rollout-flag (Parts 1 and 2 of the AppConfig rollout)
+ * Feature: render-rollout-flag (Parts 1 and 2 of the AppConfig rollout). The
+ * `renderFromBackend` flag itself was removed on 2026-10-13: every visitor now
+ * gets the request-time render. The render Lambda still reads the per-visitor
+ * `readerCounts` and `comments` flags on blog post pages through this module.
  *
  * The AppConfig Agent runs as a Lambda extension on `http://127.0.0.1:2772` and
  * keeps the deployed configuration in a local cache, polling AppConfig in the
@@ -22,7 +25,10 @@
  * https://docs.aws.amazon.com/appconfig/latest/userguide/appconfig-code-samples-agent-read-feature-flag-with-variants.html
  */
 
-/** The flag key this site rolls out behind. One flag covers all 16 routes. */
+/**
+ * The retired rollout flag. No code path reads it any more; the key stays in
+ * the deployed AppConfig content, so the tests keep it as a sample flag key.
+ */
 export const RENDER_FLAG_KEY = "renderFromBackend";
 
 /** The flag that shows "reading now" and "read so far" on blog posts. */
@@ -177,11 +183,3 @@ export async function getFlag(
   }
 }
 
-/** Whether the `renderFromBackend` flag is on for this visitor. */
-export function getRenderFlag(
-  vid: string,
-  config: FlagConfig | null = flagConfigFromEnv(),
-  deps: FlagReadDeps = defaultDeps,
-): Promise<boolean> {
-  return getFlag(RENDER_FLAG_KEY, vid, config, deps);
-}

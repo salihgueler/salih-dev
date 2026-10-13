@@ -20,7 +20,6 @@ import {
 import {
   COMMENTS_FLAG_KEY,
   getFlag,
-  getRenderFlag,
   READER_COUNTS_FLAG_KEY,
 } from "./lib/flags";
 import { isBlogPostHtmlPath } from "./lib/reader-counts";
@@ -95,14 +94,18 @@ function s3(): S3Client {
  */
 
 /**
- * Copies a response, applying the rollout success Cache-Control, the
+ * Copies a response, applying the success Cache-Control, the
  * `x-render-path: lambda` marker, and the freshly minted `vid` cookie when one
- * is needed. Used on the on path (an Astro render).
+ * is needed. Used on a successful Astro render.
  */
-function decorateOnPath(response: Response, setCookie: string | null): Response {
+function decorateOnPath(
+  response: Response,
+  cacheControl: string,
+  setCookie: string | null,
+): Response {
   const headers = new Headers(response.headers);
   if (response.status < 500) {
-    headers.set("Cache-Control", successCacheControl());
+    headers.set("Cache-Control", cacheControl);
   }
   headers.set(RENDER_PATH_HEADER, RENDER_PATH_LAMBDA);
   if (setCookie !== null) headers.append("Set-Cookie", setCookie);
@@ -160,9 +163,15 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
 /**
  * Resolves the dynamic route's content from S3 and renders inside the
- * request-scoped overrides. When the flag is off for this visitor, or the on
- * path fails with a 5xx (a content read or validation failure, or a failed
- * render), it serves the baked page from the site bucket instead.
+ * request-scoped overrides. If the render fails with a 5xx (a content read or
+ * validation failure, or a failed render), it serves the baked page from the
+ * site bucket instead.
+ *
+ * Only a blog post's HTML page differs per visitor (the `readerCounts` and
+ * `comments` flags). That page stays out of the edge cache and is the only one
+ * that reads the `vid` cookie or mints one. Every other dynamic route is the
+ * same for everyone, so it is edge-cacheable and never carries a Set-Cookie: a
+ * cached Set-Cookie would hand every visitor the same `vid`.
  */
 async function renderDynamic(
   context: APIContext,
@@ -176,37 +185,25 @@ async function renderDynamic(
     return failure(500, "render configuration error");
   }
 
-  // Resolve the visitor id and read the rollout flag. Any flag-read failure
-  // returns false (the off path), which is the safe, known-good behaviour.
-  const { vid, setCookie } = resolveVid(
-    context.request.headers.get("Cookie"),
-  );
-  const flagOn = await getRenderFlag(vid);
-
-  // Off path: serve the baked static page the publisher already produced for
-  // this route from the site bucket, with the same headers as today plus the
-  // `x-render-path: static` marker and the vid cookie when freshly minted.
-  if (!flagOn) {
-    return serveOffPath(context.url.pathname, setCookie);
-  }
-
-  // On path: render through Astro exactly as PR #10 does, reading the route's
-  // content from S3 inside the request-scoped overrides.
   const today =
     process.env.SITE_CONTENT_TODAY ?? new Date().toISOString().slice(0, 10);
 
-  // Reader counts (a second flag): only a blog post's HTML page shows them,
-  // and only request-time renders, so the baked pages never carry the widget.
-  // A failed read is off, like every flag read.
-  // Comments are a third flag with the same rules. Each feature has its own
-  // flag, so each can be on for different visitors and roll back alone.
-  const isPost = isBlogPostHtmlPath(context.url.pathname);
-  const [readerCounts, comments] = isPost
-    ? await Promise.all([
-        getFlag(READER_COUNTS_FLAG_KEY, vid),
-        getFlag(COMMENTS_FLAG_KEY, vid),
-      ])
-    : [false, false];
+  // Reader counts and comments: only a blog post's HTML page shows them, and
+  // each has its own flag so each can be on for different visitors and roll
+  // back alone. A failed read is off, like every flag read.
+  const perVisitor = isBlogPostHtmlPath(context.url.pathname);
+  const cacheControl = successCacheControl(perVisitor);
+  let setCookie: string | null = null;
+  let readerCounts = false;
+  let comments = false;
+  if (perVisitor) {
+    const visitor = resolveVid(context.request.headers.get("Cookie"));
+    setCookie = visitor.setCookie;
+    [readerCounts, comments] = await Promise.all([
+      getFlag(READER_COUNTS_FLAG_KEY, visitor.vid),
+      getFlag(COMMENTS_FLAG_KEY, visitor.vid),
+    ]);
+  }
   context.locals.readerCounts = readerCounts;
   context.locals.comments = comments;
 
@@ -238,20 +235,20 @@ async function renderDynamic(
     rendered = await run();
   } catch {
     // The content bucket could not be read (or the content failed validation).
-    // During the rollout the edge caches nothing, so stale-if-error cannot
-    // cover this; fall back to the baked page the off path serves instead.
+    // A per-visitor page has no cached copy for stale-if-error to serve, and an
+    // expired cached copy may be gone too, so fall back to the baked page.
     logOnPathFallback(context.url.pathname);
-    return serveOffPath(context.url.pathname, setCookie);
+    return serveOffPath(context.url.pathname, cacheControl, setCookie);
   }
 
   // A render that itself produced a server error falls back the same way. A
   // 4xx (an unknown post, say) is a real answer and is passed through.
   if (rendered.status >= 500) {
     logOnPathFallback(context.url.pathname);
-    return serveOffPath(context.url.pathname, setCookie);
+    return serveOffPath(context.url.pathname, cacheControl, setCookie);
   }
 
-  return decorateOnPath(rendered, setCookie);
+  return decorateOnPath(rendered, cacheControl, setCookie);
 }
 
 /**
@@ -265,13 +262,15 @@ function logOnPathFallback(route: string): void {
 }
 
 /**
- * Serves the baked static page for a dynamic route from the site bucket. Used
- * when the flag is off for this visitor, and as the fallback when the on path
- * fails with a 5xx. A missing baked object is a 404 and a site-bucket failure a
- * `no-store` 502, both from `serveBakedPage`.
+ * Serves the baked static page for a dynamic route from the site bucket, as
+ * the fallback when the request-time render fails with a 5xx. The publisher
+ * rebakes these pages on every content write, so the fallback stays current. A
+ * missing baked object is a 404 and a site-bucket failure a `no-store` 502,
+ * both from `serveBakedPage`.
  */
 async function serveOffPath(
   pathname: string,
+  cacheControl: string,
   setCookie: string | null,
 ): Promise<Response> {
   const siteBucket = process.env.SITE_BUCKET_NAME;
@@ -282,7 +281,7 @@ async function serveOffPath(
     s3(),
     siteBucket,
     pathname,
-    successCacheControl(),
+    cacheControl,
   );
   if (setCookie === null || baked.status >= 500) return baked;
   const headers = new Headers(baked.headers);
