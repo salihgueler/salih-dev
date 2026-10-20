@@ -111,6 +111,9 @@ test("syncs a new article once and reuses its manifest", async () => {
       removed: 0,
       unchanged: 0,
     });
+    const listUrl = new URL(calls[0]);
+    assert.equal(listUrl.pathname, "/api/articles/latest");
+    assert.equal(listUrl.searchParams.get("username"), "salihgueler");
     const markdown = await readFile(
       path.join(options.outputDirectory, `${article.slug}.md`),
       "utf8",
