@@ -237,7 +237,11 @@ async function fetchArticleList(apiBase, username, fetchImpl) {
   const perPage = 100;
 
   for (let page = 1; ; page += 1) {
-    const url = new URL(`${apiBase}/articles`);
+    // /articles/latest returns the same published articles, newest first.
+    // The plain /articles?username= list can be served from dev.to's CDN
+    // for more than a day after a new post; the importer then reads that
+    // post as unpublished and removes it from the site.
+    const url = new URL(`${apiBase}/articles/latest`);
     url.searchParams.set("username", username);
     url.searchParams.set("per_page", String(perPage));
     url.searchParams.set("page", String(page));
