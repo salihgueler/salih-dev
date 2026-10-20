@@ -44,8 +44,9 @@ const { slug } = Astro.props;
     </div>
     <p class="comments-hint">
       I read every comment before it shows up here. Your name and comment are
-      shown publicly once I approve them. Nothing else about you is stored with
-      them.
+      shown publicly once I approve them, and nothing else about you is stored
+      with them. Comments I don't approve are deleted after 30 days. To have
+      yours removed, see the <a href="/privacy/#comments">privacy page</a>.
     </p>
     <button type="submit">Send comment</button>
     <p class="comments-status" data-comments-status role="status" aria-live="polite"></p>
